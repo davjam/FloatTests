@@ -1,5 +1,6 @@
 {-# OPTIONS -Wall -Wpartial-fields #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 import Data.Foldable
 
@@ -70,6 +71,8 @@ main = do
   traverse_ (testFn (vals::[Double])) fns
   putStrLn "Float fails:"
   traverse_ (testFn (vals::[Float])) fns
+  putStrLn "Large sin fails:"
+  traverse_ print (sinLargeFails @Double)
   where
     testFn :: (Show a, RealFloat a) => [a] -> Fn a -> IO ()
     testFn xs (Fn name f expecteds) = traverse_ putFail $ zip xs expecteds
@@ -117,3 +120,20 @@ asinhNewt x = iterate (\z -> z - (sinh z - x)/cosh z) 1 !! 30
 fact :: Integral a => a -> a
 fact 0 = 1
 fact n = n * fact (n - 1)
+
+piRat :: Rational
+piRat = 4 / foldr (\i f -> 2*i-1 + i^(2::Int)/f) (2*n - 1) [1..n]
+  where n = 21  --gives similar accuracy as pi::Double
+
+sinLarge :: RealFloat a => a -> a
+sinLarge x = fromRational $ sinTay r
+  where
+    (n, _) = properFraction $ xRat / (2 * piRat)
+    r = xRat - 2 * fromInteger n * piRat
+    xRat = toRational x
+
+sinLargeFails :: RealFloat a => [a]
+sinLargeFails = filter (\x -> not $ sin x `hasVal` (A $ sinLarge x)) bigNums
+
+bigNums :: RealFloat a => [a]
+bigNums = take 10 $ iterate sqrt mx
