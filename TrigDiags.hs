@@ -29,6 +29,9 @@ import Debug.Trace
 -- Overall document
 ------------------------------------
 
+--I put the html output on github following https://stackoverflow.com/questions/8446218/how-to-see-an-html-page-on-github-as-a-normal-rendered-html-page-to-see-preview
+--see: https://davjam.github.io/FloatTests/TrigDiags/Curr.html and https://davjam.github.io/FloatTests/TrigDiags/Fixed.html
+
 main :: IO ()
 main = do
   writeGraphsDoc True FullGraph fixedPlots "TrigDiags\\Fixed.html"
