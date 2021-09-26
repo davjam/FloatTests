@@ -1,6 +1,10 @@
 {-# OPTIONS -Wall -Wpartial-fields #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# OPTIONS -Wno-unrecognised-pragmas #-}
+
+{-# HLINT ignore "Redundant $" #-}
+{-# HLINT ignore "Use tan" #-}
 
 import Data.Foldable
 
@@ -133,7 +137,7 @@ sinLarge x = fromRational $ sinTay r
     xRat = toRational x
 
 sinLargeFails :: RealFloat a => [a]
-sinLargeFails = filter (\x -> not $ sin x `hasVal` (A $ sinLarge x)) bigNums
+sinLargeFails = filter (\x -> not $ sin x `hasVal` A (sinLarge x)) bigNums
 
 bigNums :: RealFloat a => [a]
 bigNums = take 10 $ iterate sqrt mx
