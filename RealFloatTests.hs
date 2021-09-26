@@ -7,6 +7,7 @@
 {-# HLINT ignore "Use tan" #-}
 
 import Data.Foldable
+import qualified MyFloat as F
 
 data Fn a = Fn 
   String          --name
@@ -42,8 +43,10 @@ fns = [Fn "recip"         recip         [E nan, E $ -0   , A $  -0   , E $ -1   
       ,Fn "cosh"          cosh          [E nan, E $  inf , E $  inf  , A $  cosh1  , E $  1  , E $ 1   , A $ cosh1 , E $ inf  , E $ inf ]
       ,Fn "tanh"          tanh          [E nan, E $ -1   , E $ -1    , A $ -tanh1  , E $ -0  , E $ 0   , A $ tanh1 , E $ 1    , E $ 1   ]
       ,Fn "asinh"         asinh         [E nan, E $ -inf , R         , A $ -asinh1 , E $ -0  , E $ 0   , A $ asinh1, R        , E $ inf ]
+      ,Fn "F.asinh"       F.asinh       [E nan, E $ -inf , R         , A $ -asinh1 , E $ -0  , E $ 0   , A $ asinh1, R        , E $ inf ]
       ,Fn "acosh"         acosh         [E nan, E $  nan , E $ nan   , E $  nan    , E $  nan, E $ nan , E $ 0     , R        , E $ inf ]
       ,Fn "atanh"         atanh         [E nan, E $  nan , E $ nan   , E $ -inf    , E $ -0  , E $ 0   , E $ inf   , E $ nan  , E $ nan ]
+      ,Fn "F.atanh"       F.atanh       [E nan, E $  nan , E $ nan   , E $ -inf    , E $ -0  , E $ 0   , E $ inf   , E $ nan  , E $ nan ]
       ]
 inf, nan, mx :: forall a. RealFloat a => a
 inf = 1/0

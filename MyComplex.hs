@@ -13,6 +13,7 @@ import           Data.Complex  hiding (phase)
 import           Numeric              (log1p)
 
 import qualified MyFloat       as F   (asinh)
+import           MyFloat              (copySign)
 
 
 {-
@@ -128,15 +129,6 @@ atanh z@(x:+y) | x > th || abs y > th = realPart(1/z) :+ copySign (pi/2) y
 
 sq :: Num a => a -> a
 sq x = x * x
-
-copySign :: RealFloat a => a -> a -> a        --not correct for x or y being NaN, but guess this doesn't matter.
-copySign x y | makePos   = abs x
-             | otherwise = negate $ abs x
-  where
-    makePos | isNegativeZero y = False
-            | y < 0            = False
-            | otherwise        = True
-
 
 {-
 z                              P.atanh z                                          atanh z
