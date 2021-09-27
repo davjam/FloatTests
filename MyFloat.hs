@@ -20,18 +20,18 @@ asinh :: RealFloat a => a -> a
 asinh x | isInfinite x = x
         | otherwise =
   let y = abs x
-      z | y > sqrt floatSuccLim  =  log 2 + log y
-        | otherwise              =  log1p (y + y*y/(sqrt (y*y + 1) + 1))
+      z | y >= sqrt floatSuccLim  =  log 2 + log y
+        | otherwise               =  log1p (y + y*y/(sqrt (y*y + 1) + 1))
   in copySign z x
 
 {-
-when x*x+1 == x*x:
-    log1p (x + sqrt (x * x + 1.0) - 1.0)
-=   log1p (x + sqrt (x * x      ) - 1.0)
-=   log1p (x +       x            - 1.0)
-=   log   (x +       x                 )
-=   log   (2 *       x                 )
-=   log    2 + log   x
+when y*y+1 == y*y:
+    log1p (y + sqrt (y * y + 1.0) - 1.0)
+=   log1p (y + sqrt (y * y      ) - 1.0)
+=   log1p (y +       y            - 1.0)
+=   log   (y +       y                 )
+=   log   (2 *       y                 )
+=   log    2 + log   y                    FIXME: At y = sqrt floatSuccLim, this is slightly out (and causes temp descending behaviour).
 -}
 
 
@@ -63,6 +63,6 @@ copySign x y | makePos   = abs x
             | y < 0            = False
             | otherwise        = True
 
---beyond x=floatSuccLim, x+1 == x
+--at and beyond x=floatSuccLim, x+1 == x
 floatSuccLim :: forall a. RealFloat a => a
 floatSuccLim = encodeFloat (floatRadix @a undefined ^ floatDigits @a undefined) 0
