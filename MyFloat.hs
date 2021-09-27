@@ -1,7 +1,7 @@
 {-# OPTIONS -Wall -Wpartial-fields #-}
-{-# LANGUAGE ScopedTypeVariables, TypeApplications #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
-module MyFloat (asinh, atanh, copySign)
+module MyFloat (asinh, atanh, copySign, asinhCutover)
 where
 
 import           Prelude       hiding (asinh, atanh)
@@ -14,25 +14,21 @@ The plan is to fix mingw-w64 (https://github.com/mirror/mingw-w64/blob/master/mi
 This is a (fixed) Haskell reimplementation of that code.
 It fixes https://sourceforge.net/p/mingw-w64/bugs/916/ (fails for large values) 
 and https://sourceforge.net/p/mingw-w64/bugs/515/ (asinh 0 gives -0.0).
+
+See MyFloatC.c for expected c code, and commentary on formula.
 -}
 
 asinh :: RealFloat a => a -> a
 asinh x | isInfinite x = x
         | otherwise =
   let y = abs x
-      z | y >= sqrt floatSuccLim  =  log 2 + log y
-        | otherwise               =  log1p (y + y*y/(sqrt (y*y + 1) + 1))
+      z | y >= asinhCutover  =  log 2 + log y
+        | otherwise          =  log1p (y + y*y/(sqrt (y*y + 1) + 1))
   in copySign z x
 
-{-
-when y*y+1 == y*y:
-    log1p (y + sqrt (y * y + 1.0) - 1.0)
-=   log1p (y + sqrt (y * y      ) - 1.0)
-=   log1p (y +       y            - 1.0)
-=   log   (y +       y                 )
-=   log   (2 *       y                 )
-=   log    2 + log   y                    FIXME: At y = sqrt floatSuccLim, this is slightly out (and causes temp descending behaviour).
--}
+asinhCutover :: forall a. RealFloat a => a
+asinhCutover = encodeFloat 1 (e `div` 2) where
+  (_, e) = floatRange (undefined :: a)
 
 
 {- ATANH
@@ -63,6 +59,3 @@ copySign x y | makePos   = abs x
             | y < 0            = False
             | otherwise        = True
 
---at and beyond x=floatSuccLim, x+1 == x
-floatSuccLim :: forall a. RealFloat a => a
-floatSuccLim = encodeFloat (floatRadix @a undefined ^ floatDigits @a undefined) 0

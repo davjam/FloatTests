@@ -6,6 +6,7 @@
 {-# HLINT ignore "Redundant $" #-}
 {-# HLINT ignore "Use tan" #-}
 
+import Control.Monad
 import Data.Foldable
 import qualified MyFloat as F
 
@@ -80,6 +81,9 @@ main = do
   traverse_ (testFn (vals::[Float])) fns
   putStrLn "Large sin fails:"
   traverse_ print (sinLargeFails @Double)
+  unless (isIncreasingAt @Double F.asinh F.asinhCutover) $ putStrLn "asinh not increasing (Double)"
+  unless (isIncreasingAt @Float  F.asinh F.asinhCutover) $ putStrLn "asinh not increasing (Float)"
+
   where
     testFn :: (Show a, RealFloat a) => [a] -> Fn a -> IO ()
     testFn xs (Fn name f expecteds) = traverse_ putFail $ zip xs expecteds
@@ -144,3 +148,25 @@ sinLargeFails = filter (\x -> not $ sin x `hasVal` A (sinLarge x)) bigNums
 
 bigNums :: RealFloat a => [a]
 bigNums = take 10 $ iterate sqrt mx
+
+isIncreasingAt :: RealFloat a => (a -> a) -> a -> Bool
+isIncreasingAt f x0 = smallInc y0  y1
+                   && smallInc ym1 y0
+  where
+    (y0, _, y1 ) = yStep nextUp   f x0
+    (_ , _, ym1) = yStep nextDown f x0
+    smallInc ya yb = yb > ya && yb - ya < 0.00001 --FIXME: This is good for asinh (which is only slightly increasing), but probably no good for other cases.
+
+    --These simplistic definitions fail at zero, infinities, NaN, etc:
+    nextUp   x = encodeFloat (m+1) e where (m,e) = decodeFloat x
+    nextDown x = encodeFloat (m-1) e where (m,e) = decodeFloat x
+
+yStep :: RealFloat a
+      => (a -> a)     --a step function in x
+      -> (a -> a)     --the function to test
+      -> a            --x0
+      -> (a, a, a)    --(f x0, x1, f x1) where x1 is the first x where f(x1) /= f(x0)
+yStep xStep f x0 = (y0, x1, f x1) where
+    y0 = f x0
+    xs = iterate xStep (xStep x0)
+    x1 = head $ dropWhile ((== y0) . f) xs
