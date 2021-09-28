@@ -1,6 +1,7 @@
 {-# OPTIONS -Wall -Wpartial-fields #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# OPTIONS -Wno-unrecognised-pragmas #-}
 
 {-# HLINT ignore "Redundant $" #-}
@@ -37,7 +38,7 @@ fns = [Fn "recip"         recip         [E nan, E $ -0   , A $  -0   , E $ -1   
       ,Fn "(`logBase` 2)" (`logBase` 2) [E nan, E $  nan , E $  nan  , E $  nan    , E $ -0  , E $ -0  , E $ inf   , R        , E $ 0   ] --log base 0 and 1 should be undefined?
       ,Fn "sin"           sin           [E nan, E $  nan , R         , A $ -sin1   , E $ -0  , E $ 0   , A $ sin1  , R        , E $ nan ]
       ,Fn "cos"           cos           [E nan, E $  nan , R         , A $  cos1   , E $  1  , E $ 1   , A $ cos1  , R        , E $ nan ]
-      ,Fn "tan"           tan           [E nan, E $  nan , A $ -tanMx, A $ -tan1   , E $ -0  , E $ 0   , A $ tan1  , A $ tanMx, E $ nan ]
+      ,Fn "tan"           tan           [E nan, E $  nan , R         , A $ -tan1   , E $ -0  , E $ 0   , A $ tan1  , R        , E $ nan ]
       ,Fn "asin"          asin          [E nan, E $  nan , E $  nan  , A $ -pi/2   , E $ -0  , E $ 0   , A $ pi/2  , E $ nan  , E $ nan ]
       ,Fn "acos"          acos          [E nan, E $  nan , E $  nan  , A $  pi     , A $ pi/2, A $ pi/2, E $ 0     , E $ nan  , E $ nan ]
       ,Fn "atan"          atan          [E nan, A $ -pi/2, A $ -pi/2 , A $ -pi/4   , E $ -0  , E $ 0   , A $ pi/4  , A $ pi/2 , A $ pi/2]
@@ -61,7 +62,7 @@ mx = encodeFloat m n where
     n = e' - e
     a = undefined :: a
 
-exp1, expN1, sin1, cos1, tan1, sinh1, cosh1, tanh1, asinh1, tanMx :: RealFloat a => a
+exp1, expN1, sin1, cos1, tan1, sinh1, cosh1, tanh1, asinh1 :: RealFloat a => a
 exp1  = fromRational $ expTay    1
 expN1 = fromRational $ expTay $ -1
 sin1  = fromRational $ sinTay 1
@@ -72,8 +73,6 @@ cosh1 = fromRational $ coshTay 1
 tanh1 = sinh1 / cosh1
 asinh1 = asinhNewt 1
 
-tanMx = sin mx / cos mx
-
 main :: IO ()
 main = do
   putStrLn "Double fails:"
@@ -81,13 +80,28 @@ main = do
   putStrLn "Float fails:"
   traverse_ (testFn (vals::[Float])) fns
 
-{-Test suspended. See issue 4.
-  putStrLn "Large sin fails:"
-  traverse_ print (sinLargeFails @Double)
--}
-
   unless (isIncreasingAt @Double F.asinh F.asinhCutover) $ putStrLn "asinh not increasing (Double)"
   unless (isIncreasingAt @Float  F.asinh F.asinhCutover) $ putStrLn "asinh not increasing (Float)"
+  
+  putStrLn "identity fails (Double):"
+  itentityFails @Double
+  putStrLn "identity fails (Float):"
+  itentityFails @Float
+
+  putStrLn "alg values fails (Double):"
+  testAlgVals @Double
+  putStrLn "alg values fails (Float):"
+  testAlgVals @Float
+
+  putStrLn "Large sin fails (Double):"
+  traverse_ print (sinLargeFails @Double)
+  putStrLn "Large sin fails (Float):"
+  traverse_ print (sinLargeFails @Float)
+
+  putStrLn "Large cos fails (Double):"
+  traverse_ print (cosLargeFails @Double)
+  putStrLn "Large cos fails (Float):"
+  traverse_ print (cosLargeFails @Float)
 
   where
     testFn :: (Show a, RealFloat a) => [a] -> Fn a -> IO ()
@@ -143,34 +157,95 @@ fact n = n * fact (n - 1)
 
 {-
 TESTS FOR SIN ETC OF HUGE NUMBERS
-
+-}
 
 piRat :: Rational
 piRat = 4 / foldr (\i f -> 2*i-1 + i^(2::Int)/f) (2*n - 1) [1..n]
-  where n = 1000  --21 gives similar accuracy as pi::Double
+  where n = 30  --21 gives similar accuracy as pi::Double
 
 sinLarge :: RealFloat a => a -> a
-sinLarge x = fromRational $ sinTay r
+sinLarge = fromRational . sinTay . mod2pi
+
+cosLarge :: RealFloat a => a -> a
+cosLarge = fromRational . cosTay . mod2pi
+
+mod2pi :: RealFloat a => a -> Rational
+mod2pi x = xRat - 2 * fromInteger n * piRat
   where
-    (n, _) = properFraction $ xRat / (2 * piRat)
-    r = xRat - 2 * fromInteger n * piRat
     xRat = toRational x
+    (n, _) = properFraction $ xRat / (2 * piRat)
+
 
 sinLargeFails :: RealFloat a => [a]
 sinLargeFails = filter (\x -> not $ sin x `hasVal` A (sinLarge x)) bigNums
 
+cosLargeFails :: RealFloat a => [a]
+cosLargeFails = filter (\x -> not $ cos x `hasVal` A (cosLarge x)) bigNums
+
 bigNums :: RealFloat a => [a]
-bigNums = take 10 $ iterate sqrt mx
--}
+bigNums = ns ++ map negate ns where
+  ns = take 14 $ iterate (*10) 10 --at x=1e15, sin x/cos x = -1.672409893861645; tan x = -1.672414782127583. They differ by slightly more than err.
+
+--See https://en.wikipedia.org/wiki/Trigonometric_functions#Algebraic_values
+algVals :: RealFloat a => [(String, a,a,a)] --(name, x, sin x, cos x)
+algVals = [("  pi/12",   pi/12, (sqrt 6 - sqrt 2)/4  , (sqrt 6 + sqrt 2)/4  )
+          ,("  pi/10",   pi/10, (sqrt 5 - 1)/4       , sqrt(10 + 2*sqrt 5)/4)
+          ,("  pi/8 ",   pi/8 , sqrt(2-sqrt 2) / 2   , sqrt(2 + sqrt 2)/2   )
+          ,("  pi/6 ",   pi/6 , 1/2                  , sqrt 3 / 2           )
+          ,("  pi/5 ",   pi/5 , sqrt(10-2*sqrt 5) / 4, (1 + sqrt 5) / 4     )
+          ,("  pi/4 ",   pi/4 , sqrt 2 / 2           , sqrt 2 / 2           )
+          ,("3*pi/10", 3*pi/10, (1+sqrt 5)/4         , sqrt(10 - 2*sqrt 5)/4)
+          ,("  pi/3 ",   pi/3 , sqrt 3 / 2           , 1/2                  )
+          ,("3*pi/8 ", 3*pi/8 , sqrt(2+sqrt 2) / 2   , sqrt(2 - sqrt 2)/2   )
+          ,("2*pi/5 ", 2*pi/5 , sqrt(10+2*sqrt 5) / 4, (sqrt 5 - 1)/4       )
+          ,("5*pi/12", 5*pi/12, (sqrt 6 + sqrt 2)/4  , (sqrt 6 - sqrt 2)/4  )
+          ,("  pi/2 ",   pi/2 , 1                    , 0                    )
+          ]
+
+testAlgVals :: forall a. RealFloat a => IO ()
+testAlgVals = traverse_ testAlg (algVals @a)
+  where
+    testAlg (name,x,siny,cosy) = do
+      unless ((fromRational . sinTay . toRational) x `hasVal` A siny) $ putStrLn $ "sinTay error: " ++ name
+      unless ((fromRational . cosTay . toRational) x `hasVal` A cosy) $ putStrLn $ "cosTay error: " ++ name
+      unless (             sin x `hasVal` A siny       ) $ putStrLn $ "sin " ++ name
+      unless (             cos x `hasVal` A cosy       ) $ putStrLn $ "cos " ++ name
+      unless (cosy == 0 || tan x `hasVal` A (siny/cosy)) $ putStrLn $ "tan " ++ name
+      
 
 {-
 TESTS FOR IDENTITIES
+-}
 
 --expect tan x = sin x / cos x
 
-tanSinCosFails :: RealFloat a => [a]
-tanSinCosFails = filter (\x -> tan x /= sin x / cos x) bigNums
--}
+itentityFails :: forall a. (RealFloat a, Enum a, Show a) => IO ()
+itentityFails = do
+  traverse_ idFails identities
+  where
+    idFails (name, f1, f2) = traverse idFail (smallNums ++ bigNums :: [a])
+      where
+        idFail x | f1 x `hasVal` A (f2 x) = return ()
+                 | otherwise = putStrLn $ name ++ " " ++ show x
+
+identities :: RealFloat a => [(String, a -> a, a -> a)]
+identities = [("sin -x == -sin x", sin . negate, negate . sin)
+             ,("cos -x == cos x", cos . negate, cos)
+             ,("tan -x == - tan x", tan . negate, negate . tan)
+             ,("sin^2 + cos^2 = 1", \x -> (sin x)^(2::Int) + (cos x)^(2::Int), const 1)
+             ,("tan=sin/cos", tan, \x -> sin x / cos x)
+             ,("sinh -x == -sinh x", sinh . negate, negate . sinh)
+             ,("cosh -x == cosh x", cosh . negate, cosh)
+             ,("tanh -x == -tanh x", tanh . negate, negate . tanh)
+             {-although mathematically true, these fail computationally even on small numbers:
+             ,("cosh x + sinh x = exp x", \x -> cosh x + sinh x, exp)
+             ,("cosh^2 - sinh^2 = 1", \x -> (cosh x)^(2::Int) - (sinh x)^(2::Int), const 1)
+             -}
+             ]
+
+smallNums :: (Enum a, RealFloat a) => [a]
+smallNums = ns ++ map negate ns where
+  ns = [1/16,1/8..10]
 
 {-
 TESTS FOR MONOTONICITY
