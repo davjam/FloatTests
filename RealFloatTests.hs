@@ -23,6 +23,7 @@ data Expected a = E a    --exactly
 vals :: RealFloat a => [a]
 vals =                                  [  nan,     -inf , -mx       ,     -1      ,     -0  ,      0  ,     1     ,     mx   ,     inf ]
                                                            
+--See IEEE 754 Standards 9.2.1 Special Values for some of these.
 fns :: RealFloat a => [Fn a]                               
 fns = [Fn "recip"         recip         [E nan, E $ -0   , A $  -0   , E $ -1      , E $ -inf, E $  inf, E $ 1     , A $ 0    , E $ 0   ]
       ,Fn "sqrt"          sqrt          [E nan, E $  nan , E $  nan  , E $  nan    , E $ -0  , E $  0  , E $ 1     , R        , E $ inf ]
@@ -79,8 +80,12 @@ main = do
   traverse_ (testFn (vals::[Double])) fns
   putStrLn "Float fails:"
   traverse_ (testFn (vals::[Float])) fns
+
+{-Test suspended. See issue 4.
   putStrLn "Large sin fails:"
   traverse_ print (sinLargeFails @Double)
+-}
+
   unless (isIncreasingAt @Double F.asinh F.asinhCutover) $ putStrLn "asinh not increasing (Double)"
   unless (isIncreasingAt @Float  F.asinh F.asinhCutover) $ putStrLn "asinh not increasing (Float)"
 
@@ -108,6 +113,10 @@ x `hasVal` (A y) | isNaN x          = isNaN y
                  | otherwise        = abs (x/y - 1) < err
   where err = 0.000001
 
+{-
+"CORRECT" CALCULATIONS USING TAYLOR SERIES ETC
+-}
+
 --Taylor series calcs per https://en.wikipedia.org/wiki/Taylor_series
 sinTay, cosTay, sinhTay, coshTay, expTay :: Rational -> Rational
 sinTay = taylor (cycle [1,-1]) [1,3..]
@@ -132,9 +141,13 @@ fact :: Integral a => a -> a
 fact 0 = 1
 fact n = n * fact (n - 1)
 
+{-
+TESTS FOR SIN ETC OF HUGE NUMBERS
+
+
 piRat :: Rational
 piRat = 4 / foldr (\i f -> 2*i-1 + i^(2::Int)/f) (2*n - 1) [1..n]
-  where n = 21  --gives similar accuracy as pi::Double
+  where n = 1000  --21 gives similar accuracy as pi::Double
 
 sinLarge :: RealFloat a => a -> a
 sinLarge x = fromRational $ sinTay r
@@ -148,6 +161,20 @@ sinLargeFails = filter (\x -> not $ sin x `hasVal` A (sinLarge x)) bigNums
 
 bigNums :: RealFloat a => [a]
 bigNums = take 10 $ iterate sqrt mx
+-}
+
+{-
+TESTS FOR IDENTITIES
+
+--expect tan x = sin x / cos x
+
+tanSinCosFails :: RealFloat a => [a]
+tanSinCosFails = filter (\x -> tan x /= sin x / cos x) bigNums
+-}
+
+{-
+TESTS FOR MONOTONICITY
+-}
 
 isIncreasingAt :: RealFloat a => (a -> a) -> a -> Bool
 isIncreasingAt f x0 = smallInc y0  y1
