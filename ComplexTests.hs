@@ -74,3 +74,11 @@ allPlots =
   , ("atanh"                  , atanh                   )
   , ("C.atanh"                , C.atanh                 )
   ]
+
+{- TO ADD:
+sqrt((-0):+(-0)), etc.
+complex functions with zero imag match real functions.
+issue 8532: ensure acosh((-1):+0) = 0:+pi.
+log (0 :+ (-0)) == (-Infinity) :+ (-0.0).
+mkPolar is inverse of polar, for all +/- 0, +/- pi combinations.
+-}
