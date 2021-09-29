@@ -2,24 +2,22 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# OPTIONS -Wno-unrecognised-pragmas #-}
 
 {-# HLINT ignore "Redundant $" #-}
 {-# HLINT ignore "Use tan" #-}
 
-import Control.Monad
-import Data.Foldable
-import qualified MyFloat as F
+import HasVal
+--import qualified MyFloat as F
 
 data Fn a = Fn 
   String          --name
   (a -> a)        --function
   [Expected a]    --expected results
 
-data Expected a = E a    --exactly
-                | A a    --approximately (but to many sfs)
-                | R      --a real number (not NaN or infinite)
-  deriving Show
+specValTests :: (RealFloat a, Show a) => [Test a (Expected a)]
+specValTests = [Test "StdVal" name (show x) (f x) expected | Fn name f exps <- fns, (x,expected) <- zip vals exps]
 
 vals :: RealFloat a => [a]
 vals =                                  [  nan,     -inf , -mx       ,     -1      ,     -0  ,      0  ,     1     ,     mx   ,     inf ]
@@ -46,10 +44,10 @@ fns = [Fn "recip"         recip         [E nan, E $ -0   , A $  -0   , E $ -1   
       ,Fn "cosh"          cosh          [E nan, E $  inf , E $  inf  , A $  cosh1  , E $  1  , E $ 1   , A $ cosh1 , E $ inf  , E $ inf ]
       ,Fn "tanh"          tanh          [E nan, E $ -1   , E $ -1    , A $ -tanh1  , E $ -0  , E $ 0   , A $ tanh1 , E $ 1    , E $ 1   ]
       ,Fn "asinh"         asinh         [E nan, E $ -inf , R         , A $ -asinh1 , E $ -0  , E $ 0   , A $ asinh1, R        , E $ inf ]
-      ,Fn "F.asinh"       F.asinh       [E nan, E $ -inf , R         , A $ -asinh1 , E $ -0  , E $ 0   , A $ asinh1, R        , E $ inf ]
+      --,Fn "F.asinh"       F.asinh       [E nan, E $ -inf , R         , A $ -asinh1 , E $ -0  , E $ 0   , A $ asinh1, R        , E $ inf ]
       ,Fn "acosh"         acosh         [E nan, E $  nan , E $ nan   , E $  nan    , E $  nan, E $ nan , E $ 0     , R        , E $ inf ]
       ,Fn "atanh"         atanh         [E nan, E $  nan , E $ nan   , E $ -inf    , E $ -0  , E $ 0   , E $ inf   , E $ nan  , E $ nan ]
-      ,Fn "F.atanh"       F.atanh       [E nan, E $  nan , E $ nan   , E $ -inf    , E $ -0  , E $ 0   , E $ inf   , E $ nan  , E $ nan ]
+      --,Fn "F.atanh"       F.atanh       [E nan, E $  nan , E $ nan   , E $ -inf    , E $ -0  , E $ 0   , E $ inf   , E $ nan  , E $ nan ]
       ]
 inf, nan, mx :: forall a. RealFloat a => a
 inf = 1/0
@@ -75,57 +73,20 @@ asinh1 = asinhNewt 1
 
 main :: IO ()
 main = do
-  putStrLn "Double fails:"
-  traverse_ (testFn (vals::[Double])) fns
-  putStrLn "Float fails:"
-  traverse_ (testFn (vals::[Float])) fns
+  putFails "Special Value Double" (specValTests @Double)
+  putFails "Special Value Float"  (specValTests @Float )
 
-  unless (isIncreasingAt @Double F.asinh F.asinhCutover) $ putStrLn "asinh not increasing (Double)"
-  unless (isIncreasingAt @Float  F.asinh F.asinhCutover) $ putStrLn "asinh not increasing (Float)"
-  
-  putStrLn "identity fails (Double):"
-  itentityFails @Double
-  putStrLn "identity fails (Float):"
-  itentityFails @Float
+  putFails "Identity Double" (identityTests @Double)
+  putFails "Identity Float"  (identityTests @Float )
 
-  putStrLn "alg values fails (Double):"
-  testAlgVals @Double
-  putStrLn "alg values fails (Float):"
-  testAlgVals @Float
+  putFails "Algebraic Values Double" (algValTests @Double)
+  putFails "Algebraic Values Float"  (algValTests @Float )
 
-  putStrLn "Large sin fails (Double):"
-  traverse_ print (sinLargeFails @Double)
-  putStrLn "Large sin fails (Float):"
-  traverse_ print (sinLargeFails @Float)
+  putFails "Large Trig Double" (largeTrigTests @Double)
+  putFails "Large Trig Float"  (largeTrigTests @Float )
 
-  putStrLn "Large cos fails (Double):"
-  traverse_ print (cosLargeFails @Double)
-  putStrLn "Large cos fails (Float):"
-  traverse_ print (cosLargeFails @Float)
-
-  where
-    testFn :: (Show a, RealFloat a) => [a] -> Fn a -> IO ()
-    testFn xs (Fn name f expecteds) = traverse_ putFail $ zip xs expecteds
-      where
-        putFail (x,ey) | f x `hasVal` ey = return ()
-                       | otherwise = putStrLn $ name ++ " " ++ show x ++ " sb " ++ show ey ++ " is " ++ show (f x)
-
-hasVal :: RealFloat a => a -> Expected a -> Bool
-x `hasVal` R     | isNaN x          = False
-                 | isInfinite x     = False
-                 | otherwise        = True
-x `hasVal` (E y) | isNaN x          = isNaN y
-                 | isNaN y          = False
-                 | isNegativeZero x = isNegativeZero y
-                 | isNegativeZero y = False
-                 | otherwise        = x == y
-x `hasVal` (A y) | isNaN x          = isNaN y
-                 | isNaN y          = False
-                 | abs y < err      = abs x < err
-                 | signum x /= signum y = False
-                 | isInfinite x     = isInfinite y
-                 | otherwise        = abs (x/y - 1) < err
-  where err = 0.000001
+  --unless (isIncreasingAt @Double F.asinh F.asinhCutover) $ putStrLn "asinh not increasing (Double)"
+  --unless (isIncreasingAt @Float  F.asinh F.asinhCutover) $ putStrLn "asinh not increasing (Float)"
 
 {-
 "CORRECT" CALCULATIONS USING TAYLOR SERIES ETC
@@ -175,16 +136,23 @@ mod2pi x = xRat - 2 * fromInteger n * piRat
     xRat = toRational x
     (n, _) = properFraction $ xRat / (2 * piRat)
 
-
-sinLargeFails :: RealFloat a => [a]
-sinLargeFails = filter (\x -> not $ sin x `hasVal` A (sinLarge x)) bigNums
-
-cosLargeFails :: RealFloat a => [a]
-cosLargeFails = filter (\x -> not $ cos x `hasVal` A (cosLarge x)) bigNums
+largeTrigTests :: (RealFloat a, HasVal a (Expected a), Show a) => [Test a (Expected a)]
+largeTrigTests =  [Test "LargeTrig" "sin" (show x) (sin x) (A $ sinLarge x) | x <- bigNums]
+               ++ [Test "LargeTrig" "cos" (show x) (cos x) (A $ cosLarge x) | x <- bigNums]
 
 bigNums :: RealFloat a => [a]
 bigNums = ns ++ map negate ns where
   ns = take 14 $ iterate (*10) 10 --at x=1e15, sin x/cos x = -1.672409893861645; tan x = -1.672414782127583. They differ by slightly more than err.
+
+algValTests :: (RealFloat a, Show a) => [Test a (Expected a)]
+algValTests = concat [[Test "Alg value" "sin" xName (sin x) (A sinx)
+                      ,Test "Alg value" "cos" xName (cos x) (A cosx)
+                      ,Test "Taylor check" "sin" xName (fromRational $ sinTay $ toRational x) (A sinx)
+                      ,Test "Taylor check" "cos" xName (fromRational $ cosTay $ toRational x) (A cosx)
+                      ]
+                      | (xName, x, sinx, cosx) <- algVals
+                      ]
+                ++   [Test "Alg value" "tan" xName (tan x) (A $ sinx/cosx) | (xName, x, sinx, cosx) <- algVals, cosx /=0]
 
 --See https://en.wikipedia.org/wiki/Trigonometric_functions#Algebraic_values
 algVals :: RealFloat a => [(String, a,a,a)] --(name, x, sin x, cos x)
@@ -202,31 +170,15 @@ algVals = [("  pi/12",   pi/12, (sqrt 6 - sqrt 2)/4  , (sqrt 6 + sqrt 2)/4  )
           ,("  pi/2 ",   pi/2 , 1                    , 0                    )
           ]
 
-testAlgVals :: forall a. RealFloat a => IO ()
-testAlgVals = traverse_ testAlg (algVals @a)
-  where
-    testAlg (name,x,siny,cosy) = do
-      unless ((fromRational . sinTay . toRational) x `hasVal` A siny) $ putStrLn $ "sinTay error: " ++ name
-      unless ((fromRational . cosTay . toRational) x `hasVal` A cosy) $ putStrLn $ "cosTay error: " ++ name
-      unless (             sin x `hasVal` A siny       ) $ putStrLn $ "sin " ++ name
-      unless (             cos x `hasVal` A cosy       ) $ putStrLn $ "cos " ++ name
-      unless (cosy == 0 || tan x `hasVal` A (siny/cosy)) $ putStrLn $ "tan " ++ name
-      
-
 {-
 TESTS FOR IDENTITIES
 -}
 
---expect tan x = sin x / cos x
-
-itentityFails :: forall a. (RealFloat a, Enum a, Show a) => IO ()
-itentityFails = do
-  traverse_ idFails identities
-  where
-    idFails (name, f1, f2) = traverse idFail (smallNums ++ bigNums :: [a])
-      where
-        idFail x | f1 x `hasVal` A (f2 x) = return ()
-                 | otherwise = putStrLn $ name ++ " " ++ show x
+identityTests :: (RealFloat a, Enum a, Show a) => [Test a (Expected a)]
+identityTests = [ Test "identity" name (show x) (f1 x) (A $ f2 x)
+                | (name, f1, f2) <- identities
+                , x <- smallNums ++ bigNums
+                ]
 
 identities :: RealFloat a => [(String, a -> a, a -> a)]
 identities = [("sin -x == -sin x", sin . negate, negate . sin)
@@ -250,7 +202,7 @@ smallNums = ns ++ map negate ns where
 {-
 TESTS FOR MONOTONICITY
 -}
-
+{-
 isIncreasingAt :: RealFloat a => (a -> a) -> a -> Bool
 isIncreasingAt f x0 = smallInc y0  y1
                    && smallInc ym1 y0
@@ -272,3 +224,4 @@ yStep xStep f x0 = (y0, x1, f x1) where
     y0 = f x0
     xs = iterate xStep (xStep x0)
     x1 = head $ dropWhile ((== y0) . f) xs
+-}
