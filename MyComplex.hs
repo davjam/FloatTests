@@ -1,6 +1,10 @@
 {-# OPTIONS -Wall -Wpartial-fields #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
+{-
+This contains draft fixes to https://gitlab.haskell.org/ghc/ghc/-/blob/master/libraries/base/Data/Complex.hs
+-}
+
 module MyComplex ((+:), (-:), (*:), (/:),
                   phase, iTimes,
                   sqrt, log, tan, asin, acos, tanh, atan, asinh, acosh, atanh)
@@ -55,7 +59,7 @@ This is not Kahan's formula.
 It is a tweak from Prelude, fixing for neg zeros.
 -}
 
-sqrt (0:+y@0)  =  0 :+ y --ensure -0 - 0i -> 0 - 0i (All on right, but same top/bottom).
+sqrt z@(0:+0)  =  z --consistancy with sqrt(-0). Ensure correct +/-0 for imag.
 sqrt z@(x:+y)  =  u :+ (if isNeg y then -v else v)
   where (u,v)   = if isNeg x then (v',u') else (u',v')
         v'      = abs y / (u'*2)
