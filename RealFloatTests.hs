@@ -28,9 +28,14 @@ main = do
   putFails "Large Trig Double" (largeTrigTests @Double)
   putFails "Large Trig Float"  (largeTrigTests @Float )
 
+  putFails "Monotonicity Double" (monotonTests @Double)
+  putFails "Monotonicity Float"  (monotonTests @Float )
+
+{-
+
   monotonTest @Double "Double"
   monotonTest @Float  "Float"
-
+-}
 -----------------------------------------------------------------------------
 -- SPECIAL VALUE TESTS
 -- See IEEE 754 Standards 9.2.1 Special Values for some of these.
@@ -124,6 +129,7 @@ identities = [("sin -x == -sin x", sin . negate, negate . sin)
 algValTests :: (RealFloat a, Show a) => [Test a (Expected a)]
 algValTests = concat [[Test "Alg value" "sin" xName (sin x) (A sinx)
                       ,Test "Alg value" "cos" xName (cos x) (A cosx)
+                      --these next two are self-tests of the taylor series functions, that I use in the special value tests:
                       ,Test "Taylor check" "sin" xName (fromRational $ sinTay $ toRational x) (A sinx)
                       ,Test "Taylor check" "cos" xName (fromRational $ cosTay $ toRational x) (A cosx)
                       ]
@@ -185,27 +191,28 @@ smallNums = ns ++ map negate ns where
 -- TESTS FOR MONOTONICITY
 -- Only useful where formulae cutover from one expression to another.
 
-monotonTest :: RealFloat a => String -> IO ()
-monotonTest name = if (isIncreasingAt @Double asinh asinhCutover)
-          then putStrLn $ "Monoton asinh " ++ name ++ " passed."
-          else putStrLn $ "Monoton asinh " ++ name ++ " failed."
-
-asinhCutover :: forall a. RealFloat a => a
-asinhCutover = encodeFloat 1 (e `div` 2) where
-  (_, e) = floatRange (undefined :: a)
-
-isIncreasingAt :: RealFloat a => (a -> a) -> a -> Bool
-isIncreasingAt f x0 = smallInc y0  y1
-                   && smallInc ym1 y0
+monotonTests :: (RealFloat a, HasVal a (Expected a), Show a) => [Test a (Expected a)]
+monotonTests = concat [[Test "Monoton" "asinh" (show xup  ) yup   (SI y0)
+                       ,Test "Monoton" "asinh" (show xdown) ydown (SD y0)
+                       ]
+                      | (f, x0) <- monotonTestPoints
+                      , let (y0, xup,   yup)   = yStep nextUp   f x0
+                      , let (_ , xdown, ydown) = yStep nextDown f x0
+                      ]
   where
-    (y0, _, y1 ) = yStep nextUp   f x0
-    (_ , _, ym1) = yStep nextDown f x0
-    smallInc ya yb = yb > ya && yb - ya < 0.00001 --FIXME: This is good for asinh (which is only slightly increasing), but probably no good for other cases.
-    --These simplistic definitions fail at zero, infinities etc:
     nextUp   = next 1
     nextDown = next (-1)
     next step x | isNaN x = x
                 | otherwise = encodeFloat (m+step) e where (m,e) = decodeFloat x
+
+monotonTestPoints :: (RealFloat a) => [(a -> a, a)]
+monotonTestPoints = [(asinh,asinhCutover)]
+
+--and here we need to know the inner workings of the function to know which points to test:
+--(maybe this test should be pushed back into mingw-w64).
+asinhCutover :: forall a. RealFloat a => a
+asinhCutover = encodeFloat 1 (e `div` 2) where
+  (_, e) = floatRange (undefined :: a)
 
 yStep :: RealFloat a
       => (a -> a)     --a step function in x

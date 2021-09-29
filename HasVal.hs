@@ -10,7 +10,8 @@ import Data.Complex
 data Expected a = E a    --exactly
                 | A a    --approximately (but to many sfs)
                 | R      --any real (not Inf, not NaN)
-                -- | R a a  --a range (hence not NaN)
+                | SI a   --small increment above
+                | SD a   --small decrement below
   deriving Show
 
 {-
@@ -28,12 +29,16 @@ instance HasVal Double (Expected Double) where
   x `hasVal` R     = fltR x
   x `hasVal` (E e) = fltE x e
   x `hasVal` (A a) = fltA 0.000001 x a
-
+  x `hasVal` (SI s) = s < x && x - s < 0.000001
+  x `hasVal` (SD s) = s > x && s - x < 0.000001
+  
 instance HasVal Float (Expected Float) where
 --  x `hasVal` (R l u) = x >= l && x <= u
   x `hasVal` R     = fltR x
   x `hasVal` (E e) = fltE x e
-  x `hasVal` (A a) = fltA 0.001 x a
+  x `hasVal` (A a) = fltA 0.0001 x a
+  x `hasVal` (SI s) = s < x && x - s < 0.0001
+  x `hasVal` (SD s) = s > x && s - x < 0.0001
 
 --This is a weird use of Complex, but allows e.g.  E 4 :+ A 3
 instance HasVal a (Expected a) => HasVal (Complex a) (Complex (Expected a)) where
@@ -69,7 +74,7 @@ type Val  = String
 putFails :: (Show a, Show b, HasVal a b) => String -> [Test a b] -> IO ()
 putFails label tests | null fails   = putStrLn $ label ++ " passed."
                      | otherwise = do
-  putStrLn $ label ++ " failures:"
+  putStrLn $ label ++ " FAILURES:"
   traverse_ putFail fails
   where
     fails = filter (\(Test _ _ _ value expected) -> not (value `hasVal` expected)) tests
