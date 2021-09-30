@@ -31,11 +31,6 @@ main = do
   putFails "Monotonicity Double" (monotonTests @Double)
   putFails "Monotonicity Float"  (monotonTests @Float )
 
-{-
-
-  monotonTest @Double "Double"
-  monotonTest @Float  "Float"
--}
 -----------------------------------------------------------------------------
 -- SPECIAL VALUE TESTS
 -- See IEEE 754 Standards 9.2.1 Special Values for some of these.
