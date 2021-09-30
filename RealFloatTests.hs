@@ -311,16 +311,16 @@ _taySpecCheck = and
 
 _tayAlgCheck :: Bool
 _tayAlgCheck = and $
-    concat [[(fromRational @Double $ sinTay $ toRational x) `hasVal` (A sinx)
-            ,(fromRational @Double $ cosTay $ toRational x) `hasVal` (A cosx)
+    concat [[(fromRational @Double $ sinTay $ toRational x) `hasVal` A sinx
+            ,(fromRational @Double $ cosTay $ toRational x) `hasVal` A cosx
             ]
            | (_, x, sinx, cosx) <- algVals @Double
            ]
 
 _tayLargeCheck :: Bool
 _tayLargeCheck = and $
-     zipWith (\x y -> sinLarge x `hasVal` (A y)) (bigNums @Double) (largeSins @Double)
-  ++ zipWith (\x y -> cosLarge x `hasVal` (A y)) (bigNums @Double) (largeCoss @Double)
+     zipWith (\x y -> sinLarge x `hasVal` A y) (bigNums @Double) (largeSins @Double)
+  ++ zipWith (\x y -> cosLarge x `hasVal` A y) (bigNums @Double) (largeCoss @Double)
 
 --Taylor series calcs per https://en.wikipedia.org/wiki/Taylor_series
 sinTay, cosTay, sinhTay, coshTay, expTay :: Rational -> Rational
