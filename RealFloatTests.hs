@@ -126,17 +126,19 @@ mx = encodeFloat m n where
     m = b ^ e - 1
     n = e' - e
     a = undefined :: a
-
 exp1, expN1, sin1, cos1, tan1, sinh1, cosh1, tanh1, asinh1 :: RealFloat a => a
-exp1  = fromRational $ expTay    1
-expN1 = fromRational $ expTay $ -1
-sin1  = fromRational $ sinTay 1
-cos1  = fromRational $ cosTay 1
-tan1  = sin1/cos1
-sinh1 = fromRational $ sinhTay 1
-cosh1 = fromRational $ coshTay 1
-tanh1 = sinh1 / cosh1
-asinh1 = asinhNewt 1
+--These are values from WolframAlpha:
+exp1   = 2.7182818284590452353602874713526624977572470936999595749669676277
+expN1  = 0.3678794411714423215955237701614608674458111310317678345078368016
+sin1   = 0.8414709848078965066525023216302989996225630607983710656727517099
+cos1   = 0.5403023058681397174009366074429766037323104206179222276700972553
+tan1   = 1.5574077246549022305069748074583601730872507723815200383839466056
+sinh1  = 1.1752011936438014568823818505956008151557179813340958702295654130
+cosh1  = 1.5430806348152437784779056207570616826015291123658637047374022147
+tanh1  = 0.7615941559557648881194582826047935904127685972579365515968105001
+asinh1 = 0.8813735870195430252326093249797923090281603282616354107532956086
+
+--we can't define e.g. sqrtmx, since mx is different for Double and Float.
 
 -----------------------------------------------------------------------------
 -- TESTS FOR IDENTITIES.
@@ -292,4 +294,15 @@ asinhNewt x = iterate (\z -> z - (sinh z - x)/cosh z) 1 !! 30
 fact :: Integral a => a -> a
 fact 0 = 1
 fact n = n * fact (n - 1)
+
+_taylorCheck :: Bool
+_taylorCheck = and
+  [exp1   @Double == fromRational (expTay  1 )
+  ,expN1  @Double == fromRational (expTay(-1))
+  ,sin1   @Double == fromRational (sinTay  1 )
+  ,cos1   @Double == fromRational (cosTay  1 )
+  ,sinh1  @Double == fromRational (sinhTay 1 )
+  ,cosh1  @Double == fromRational (coshTay 1 )
+  ,asinh1 @Double == asinhNewt             1
+  ]
 
