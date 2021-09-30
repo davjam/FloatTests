@@ -14,26 +14,18 @@ data Expected a = E a    --exactly
                 | SD a   --small decrement below
   deriving Show
 
-{-
-real, pos, neg :: RealFloat a => Expected a
-real = R -mx  mx
-pos  = R  mn  mx
-neg  = R -mn -mx
--}
-
 class HasVal a b where
   hasVal :: a -> b -> Bool
 
 instance HasVal Double (Expected Double) where
---  x `hasVal` (R l u) = x >= l && x <= u
   x `hasVal` R     = fltR x
   x `hasVal` (E e) = fltE x e
   x `hasVal` (A a) = fltA 0.000001 x a
   x `hasVal` (SI s) = s < x && x - s < 0.000001
   x `hasVal` (SD s) = s > x && s - x < 0.000001
   
+ 
 instance HasVal Float (Expected Float) where
---  x `hasVal` (R l u) = x >= l && x <= u
   x `hasVal` R     = fltR x
   x `hasVal` (E e) = fltE x e
   x `hasVal` (A a) = fltA 0.0001 x a
