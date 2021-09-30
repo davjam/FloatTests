@@ -151,7 +151,7 @@ algVals = [("  pi/12",   pi/12, (sqrt 6 - sqrt 2)/4  , (sqrt 6 + sqrt 2)/4  )
 -- TESTS FOR SIN ETC OF HUGE NUMBERS
 -- Although sensible to a point, sin 1e300 is pretty random and would not be sensible to use.
 
-largeTrigTests :: (RealFloat a, HasVal a (Expected a), Show a) => [Test a (Expected a)]
+largeTrigTests :: (RealFloat a, Show a) => [Test a (Expected a)]
 largeTrigTests =  [Test "LargeTrig" "sin" (show x) (sin x) (A $ sinLarge x) | x <- bigNums]
                ++ [Test "LargeTrig" "cos" (show x) (cos x) (A $ cosLarge x) | x <- bigNums]
 
@@ -186,7 +186,7 @@ smallNums = ns ++ map negate ns where
 -- TESTS FOR MONOTONICITY
 -- Only useful where formulae cutover from one expression to another.
 
-monotonTests :: (RealFloat a, HasVal a (Expected a), Show a) => [Test a (Expected a)]
+monotonTests :: (RealFloat a, Show a) => [Test a (Expected a)]
 monotonTests = concat [[Test "Monoton" "asinh" (show xup  ) yup   (SI y0)
                        ,Test "Monoton" "asinh" (show xdown) ydown (SD y0)
                        ]
