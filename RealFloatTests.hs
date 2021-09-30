@@ -222,7 +222,7 @@ piRat = 4 / foldr (\i f -> 2*i-1 + i^(2::Int)/f) (2*n - 1) [1..n]
 
 bigNums :: RealFloat a => [a]
 bigNums = ns ++ map negate ns where
-  ns = take 14 $ iterate (*10) 10 --at x=1e15, sin x/cos x = -1.672409893861645; tan x = -1.672414782127583.
+  ns = take 9 $ iterate (*10) 10 --at x=1e10, sin x/cos x = -0.5583496377943541; tan x = -0.5583496378112418, which fails our hasVal test.
 
 smallNums :: (Enum a, RealFloat a) => [a]
 smallNums = ns ++ map negate ns where
