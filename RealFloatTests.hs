@@ -172,9 +172,6 @@ identities = [("sin -x == -sin x", sin . negate, negate . sin)
 algValTests :: (RealFloat a, Show a) => [Test a (Expected a)]
 algValTests = concat [[Test "sin" xName (sin x) (A sinx)
                       ,Test "cos" xName (cos x) (A cosx)
-                      --these next two are self-tests of the taylor series functions, that I use in the special value tests:
-                      ,Test "sinTay" xName (fromRational $ sinTay $ toRational x) (A sinx)
-                      ,Test "cosTay" xName (fromRational $ cosTay $ toRational x) (A cosx)
                       ]
                       | (xName, x, sinx, cosx) <- algVals
                       ]
@@ -200,24 +197,50 @@ algVals = [("  pi/12",   pi/12, (sqrt 6 - sqrt 2)/4  , (sqrt 6 + sqrt 2)/4  )
 -- Although sensible to a point, sin 1e300 is pretty random and would not be sensible to use.
 
 largeTrigTests :: (RealFloat a, Show a) => [Test a (Expected a)]
-largeTrigTests =  [Test "sin" (show x) (sin x) (A $ sinLarge x) | x <- bigNums]
-               ++ [Test "cos" (show x) (cos x) (A $ cosLarge x) | x <- bigNums]
+largeTrigTests =  [Test "sin" (show x) (sin x) (A y) | (x, y) <- zip bigNums largeSins]
+               ++ [Test "cos" (show x) (cos x) (A y) | (x, y) <- zip bigNums largeCoss]
 
-sinLarge :: RealFloat a => a -> a
-sinLarge = fromRational . sinTay . mod2pi
+largeSins :: RealFloat a => [a]
+largeSins = [-0.544021110889369813404747661851377281683643012916223891574184012   --  1e1
+            ,-0.506365641109758793656557610459785432065032721290657323443392473   --  1e2
+            , 0.8268795405320025602558874291092181412127249678477883209081232758  --  1e3
+            ,-0.305614388888252141360910035232506974231850043861806239110155145   --  1e4
+            , 0.0357487979720165093164705006958088290090456925781088968546167365  --  1e5
+            ,-0.349993502171292952117652486780771469061406605328716273857059054   --  1e6
+            , 0.4205477931907824912985065897409455951671752475308045898687660412  --  1e7
+            , 0.9316390271097260080275166536120429704729018385275364343082838951  --  1e8
+            , 0.5458434494486995642443872708975145289950229302628922076717364238  --  1e9
+            , 0.5440211108893698134047476618513772816836430129162238915741840126  -- -1e1
+            , 0.5063656411097587936565576104597854320650327212906573234433924735  -- -1e2
+            ,-0.826879540532002560255887429109218141212724967847788320908123275   -- -1e3
+            , 0.3056143888882521413609100352325069742318500438618062391101551456  -- -1e4
+            ,-0.035748797972016509316470500695808829009045692578108896854616736   -- -1e5
+            , 0.3499935021712929521176524867807714690614066053287162738570590546  -- -1e6
+            ,-0.420547793190782491298506589740945595167175247530804589868766041   -- -1e7
+            ,-0.931639027109726008027516653612042970472901838527536434308283895   -- -1e8
+            ,-0.545843449448699564244387270897514528995022930262892207671736423   -- -1e9
+            ]
 
-cosLarge :: RealFloat a => a -> a
-cosLarge = fromRational . cosTay . mod2pi
-
-mod2pi :: RealFloat a => a -> Rational
-mod2pi x = xRat - 2 * fromInteger n * piRat
-  where
-    xRat = toRational x
-    (n, _) = properFraction $ xRat / (2 * piRat)
-
-piRat :: Rational
-piRat = 4 / foldr (\i f -> 2*i-1 + i^(2::Int)/f) (2*n - 1) [1..n]
-  where n = 30  --21 gives similar accuracy as pi::Double
+largeCoss :: RealFloat a => [a]
+largeCoss = [-0.839071529076452452258863947824064834519930165133168546835953731   --  1e1  
+            , 0.8623188722876839341019385139508425355100840085355108292801621126  --  1e2
+            , 0.5623790762907029910782492266053959687558118217381969177028251858  --  1e3
+            ,-0.952155368259014851240386760663306001307070126044500996151572085   --  1e4
+            ,-0.999360807438212451891135414144802203235386587459727476441041121   --  1e5
+            , 0.9367521275331447869385325350749187757080978042123658797205783411  --  1e6
+            ,-0.907270386181739561161712750921675682281603816635841849698126676   --  1e7
+            ,-0.363385089355690553872375352547100110924259160874345033861427300   --  1e8
+            , 0.8378871813639023343897756435515723560595769480881178785846012511  --  1e9
+            ,-0.839071529076452452258863947824064834519930165133168546835953731   -- -1e1
+            , 0.8623188722876839341019385139508425355100840085355108292801621126  -- -1e2
+            , 0.5623790762907029910782492266053959687558118217381969177028251858  -- -1e3
+            ,-0.952155368259014851240386760663306001307070126044500996151572085   -- -1e4
+            ,-0.999360807438212451891135414144802203235386587459727476441041121   -- -1e5
+            , 0.9367521275331447869385325350749187757080978042123658797205783411  -- -1e6
+            ,-0.907270386181739561161712750921675682281603816635841849698126676   -- -1e7
+            ,-0.363385089355690553872375352547100110924259160874345033861427300   -- -1e8
+            , 0.8378871813639023343897756435515723560595769480881178785846012511  -- -1e9
+            ]
 
 -----------------------------------------------------------------------------
 --COMMON STUFF
@@ -269,6 +292,35 @@ yStep xStep f x0 = (y0, x1, f x1) where
 
 -----------------------------------------------------------------------------
 -- COMPARISON FORMULAE, using Taylor series, etc
+--
+-- I used to use these for validation, but they're quite slow.
+-- I decided it's probably best to hard code some expected values (that I
+-- got from WolframAlpha). I've kept these in case they are useful in future
+-- along with some functions to check they're working properly.
+
+_taySpecCheck :: Bool
+_taySpecCheck = and
+  [exp1   @Double == fromRational (expTay  1 )
+  ,expN1  @Double == fromRational (expTay(-1))
+  ,sin1   @Double == fromRational (sinTay  1 )
+  ,cos1   @Double == fromRational (cosTay  1 )
+  ,sinh1  @Double == fromRational (sinhTay 1 )
+  ,cosh1  @Double == fromRational (coshTay 1 )
+  ,asinh1 @Double == asinhNewt             1
+  ]
+
+_tayAlgCheck :: Bool
+_tayAlgCheck = and $
+    concat [[(fromRational @Double $ sinTay $ toRational x) `hasVal` (A sinx)
+            ,(fromRational @Double $ cosTay $ toRational x) `hasVal` (A cosx)
+            ]
+           | (_, x, sinx, cosx) <- algVals @Double
+           ]
+
+_tayLargeCheck :: Bool
+_tayLargeCheck = and $
+     zipWith (\x y -> sinLarge x `hasVal` (A y)) (bigNums @Double) (largeSins @Double)
+  ++ zipWith (\x y -> cosLarge x `hasVal` (A y)) (bigNums @Double) (largeCoss @Double)
 
 --Taylor series calcs per https://en.wikipedia.org/wiki/Taylor_series
 sinTay, cosTay, sinhTay, coshTay, expTay :: Rational -> Rational
@@ -287,22 +339,28 @@ taylorTerms coefs expons x = zipWith t coefs expons
   where
     t c e = c * x^e / fromInteger (fact e)
 
---Newton method per https://en.wikipedia.org/wiki/Newton%27s_method
-asinhNewt :: RealFloat a => a -> a
-asinhNewt x = iterate (\z -> z - (sinh z - x)/cosh z) 1 !! 30
-
 fact :: Integral a => a -> a
 fact 0 = 1
 fact n = n * fact (n - 1)
 
-_taylorCheck :: Bool
-_taylorCheck = and
-  [exp1   @Double == fromRational (expTay  1 )
-  ,expN1  @Double == fromRational (expTay(-1))
-  ,sin1   @Double == fromRational (sinTay  1 )
-  ,cos1   @Double == fromRational (cosTay  1 )
-  ,sinh1  @Double == fromRational (sinhTay 1 )
-  ,cosh1  @Double == fromRational (coshTay 1 )
-  ,asinh1 @Double == asinhNewt             1
-  ]
+sinLarge :: RealFloat a => a -> a
+sinLarge = fromRational . sinTay . mod2pi
+
+cosLarge :: RealFloat a => a -> a
+cosLarge = fromRational . cosTay . mod2pi
+
+mod2pi :: RealFloat a => a -> Rational
+mod2pi x = xRat - 2 * fromInteger n * piRat
+  where
+    xRat = toRational x
+    (n, _) = properFraction $ xRat / (2 * piRat)
+
+piRat :: Rational
+piRat = 4 / foldr (\i f -> 2*i-1 + i^(2::Int)/f) (2*n - 1) [1..n]
+  where n = 30  --21 gives similar accuracy as pi::Double
+
+--Newton method per https://en.wikipedia.org/wiki/Newton%27s_method
+
+asinhNewt :: RealFloat a => a -> a
+asinhNewt x = iterate (\z -> z - (sinh z - x)/cosh z) 1 !! 30
 
