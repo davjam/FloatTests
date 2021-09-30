@@ -151,14 +151,14 @@ identityTests = [ Test name (show x) (f1 x) (A $ f2 x)
                 ]
 
 identities :: RealFloat a => [(String, a -> a, a -> a)]
-identities = [("sin -x == -sin x", sin . negate, negate . sin)
-             ,("cos -x == cos x", cos . negate, cos)
-             ,("tan -x == - tan x", tan . negate, negate . tan)
-             ,("sin^2 + cos^2 = 1", \x -> (sin x)^(2::Int) + (cos x)^(2::Int), const 1)
-             ,("tan=sin/cos", tan, \x -> sin x / cos x)
-             ,("sinh -x == -sinh x", sinh . negate, negate . sinh)
-             ,("cosh -x == cosh x", cosh . negate, cosh)
-             ,("tanh -x == -tanh x", tanh . negate, negate . tanh)
+identities = [("sin -x == -sin x"  , sin . negate                             , negate . sin)
+             ,("cos -x == cos x"   , cos . negate                             , cos)
+             ,("tan -x == - tan x" , tan . negate                             , negate . tan)
+             ,("sin^2 + cos^2 = 1" , \x -> (sin x)^(2::Int) + (cos x)^(2::Int), const 1)
+             ,("tan=sin/cos"       , tan                                      , \x -> sin x / cos x)
+             ,("sinh -x == -sinh x", sinh . negate                            , negate . sinh)
+             ,("cosh -x == cosh x" , cosh . negate                            , cosh)
+             ,("tanh -x == -tanh x", tanh . negate                            , negate . tanh)
              {-although mathematically true, these fail computationally even on small numbers:
              ,("cosh x + sinh x = exp x", \x -> cosh x + sinh x, exp)
              ,("cosh^2 - sinh^2 = 1", \x -> (cosh x)^(2::Int) - (sinh x)^(2::Int), const 1)
