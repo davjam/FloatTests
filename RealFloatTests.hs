@@ -16,6 +16,9 @@ import HasVal
 
 main :: IO ()
 main = do
+  putFails "Inverses Double" (inveseTests invDbls)
+  putFails "Inverses Float"  (inveseTests invFlts)
+
   putFails "Special Value Double" (specValTests @Double)
   putFails "Special Value Float"  (specValTests @Float )
 
@@ -31,21 +34,64 @@ main = do
   putFails "Monotonicity Double" (monotonTests @Double)
   putFails "Monotonicity Float"  (monotonTests @Float )
 
+
+-----------------------------------------------------------------------------
+-- INVERSE TESTS
+
+inveseTests :: (RealFloat a, Show a) => [[a]] -> [Test a (Expected a)]
+inveseTests vals =  [ Test "Inverses" name (show x) (fInv (f x)) (A x)
+                    | ((name, f, fInv), xs) <- zip inverses vals
+                    , x                     <- xs
+                    ]
+
+inverses :: RealFloat a => [(String, a -> a, a -> a)]
+inverses = [( "recip"      , recip , recip )
+           ,( "log.exp"    , exp   , log   )
+           ,( "asin.sin"   , sin   , asin  )
+           ,( "acos.cos"   , cos   , acos  )
+           ,( "atan.tan"   , tan   , atan  )
+           ,( "asinh.sinh" , sinh  , asinh )
+           ,( "acosh.cosh" , cosh  , acosh )
+           ,( "atanh.tanh" , tanh  , atanh )
+           ]
+
+invDbls :: [[Double]]
+invDbls =  [[-1e20, -1e3, -1, -1e-40, 1e-40, 1e90]
+           ,[-10, -5 .. 300]
+           ,[-1.5, -1.4 .. 1.5]
+           ,[0, 0.1 .. 3]
+           ,[-0.7, -0.6 .. 0.7]
+           ,[-700, -672 .. 700]
+           ,[0, 15 .. 700]
+           ,[-0.99, -0.87 .. 0.9]
+           ]
+
+invFlts :: [[Float]]
+invFlts =  [[-1e10, -10, -1, -1e-20, 1e-20, 1e30]
+           ,[-10 .. 60]
+           ,[-1.5, -1.4 .. 1.5]
+           ,[0, 0.1 .. 3]
+           ,[-0.7, -0.6 .. 0.7]
+           ,[-80, -71 .. 80]
+           ,[0, 15 .. 80]
+           ,[-0.99, -0.87 .. 0.9]
+           ]
+
 -----------------------------------------------------------------------------
 -- SPECIAL VALUE TESTS
 -- See IEEE 754 Standards 9.2.1 Special Values for some of these.
 
 specValTests :: (RealFloat a, Show a) => [Test a (Expected a)]
-specValTests = [Test "StdVal" name (show x) (f x) expected | Fn name f exps <- fns, (x,expected) <- zip vals exps]
+specValTests = [Test "StdVal" name (show x) (f x) expected | Fn name f exps <- fns, (x,expected) <- zip specVals exps]
 
 data Fn a = Fn 
   String          --name
   (a -> a)        --function
   [Expected a]    --expected results
 
-vals :: RealFloat a => [a]
-vals =                                  [  nan,     -inf , -mx       ,     -1      ,     -0  ,      0  ,     1     ,     mx   ,     inf ]
-                                                           
+specVals :: RealFloat a => [a]
+specVals =                              [  nan,     -inf , -mx       ,     -1      ,     -0  ,      0  ,     1     ,     mx   ,     inf ]
+
 fns :: RealFloat a => [Fn a]                               
 fns = [Fn "recip"         recip         [E nan, E $ -0   , A $  -0   , E $ -1      , E $ -inf, E $  inf, E $ 1     , A $ 0    , E $ 0   ]
       ,Fn "sqrt"          sqrt          [E nan, E $  nan , E $  nan  , E $  nan    , E $ -0  , E $  0  , E $ 1     , R        , E $ inf ]
