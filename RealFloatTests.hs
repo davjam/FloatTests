@@ -39,7 +39,7 @@ main = do
 -- INVERSE TESTS
 
 inveseTests :: (RealFloat a, Show a) => [[a]] -> [Test a (Expected a)]
-inveseTests vals =  [ Test "Inverses" name (show x) (fInv (f x)) (A x)
+inveseTests vals =  [ Test name (show x) (fInv (f x)) (A x)
                     | ((name, f, fInv), xs) <- zip inverses vals
                     , x                     <- xs
                     ]
@@ -82,7 +82,7 @@ invFlts =  [[-1e10, -10, -1, -1e-20, 1e-20, 1e30]
 -- See IEEE 754 Standards 9.2.1 Special Values for some of these.
 
 specValTests :: (RealFloat a, Show a) => [Test a (Expected a)]
-specValTests = [Test "StdVal" name (show x) (f x) expected | Fn name f exps <- fns, (x,expected) <- zip specVals exps]
+specValTests = [Test name (show x) (f x) expected | Fn name f exps <- fns, (x,expected) <- zip specVals exps]
 
 data Fn a = Fn 
   String          --name
@@ -143,7 +143,7 @@ asinh1 = asinhNewt 1
 -- https://en.wikipedia.org/wiki/Trigonometric_functions#Basic_identities
 
 identityTests :: (RealFloat a, Enum a, Show a) => [Test a (Expected a)]
-identityTests = [ Test "identity" name (show x) (f1 x) (A $ f2 x)
+identityTests = [ Test name (show x) (f1 x) (A $ f2 x)
                 | (name, f1, f2) <- identities
                 , x <- smallNums ++ bigNums
                 ]
@@ -168,15 +168,15 @@ identities = [("sin -x == -sin x", sin . negate, negate . sin)
 -- https://en.wikipedia.org/wiki/Trigonometric_functions#Simple_algebraic_values
 
 algValTests :: (RealFloat a, Show a) => [Test a (Expected a)]
-algValTests = concat [[Test "Alg value" "sin" xName (sin x) (A sinx)
-                      ,Test "Alg value" "cos" xName (cos x) (A cosx)
+algValTests = concat [[Test "sin" xName (sin x) (A sinx)
+                      ,Test "cos" xName (cos x) (A cosx)
                       --these next two are self-tests of the taylor series functions, that I use in the special value tests:
-                      ,Test "Taylor check" "sin" xName (fromRational $ sinTay $ toRational x) (A sinx)
-                      ,Test "Taylor check" "cos" xName (fromRational $ cosTay $ toRational x) (A cosx)
+                      ,Test "sinTay" xName (fromRational $ sinTay $ toRational x) (A sinx)
+                      ,Test "cosTay" xName (fromRational $ cosTay $ toRational x) (A cosx)
                       ]
                       | (xName, x, sinx, cosx) <- algVals
                       ]
-                ++   [Test "Alg value" "tan" xName (tan x) (A $ sinx/cosx) | (xName, x, sinx, cosx) <- algVals, cosx /=0]
+                ++   [Test "tan" xName (tan x) (A $ sinx/cosx) | (xName, x, sinx, cosx) <- algVals, cosx /=0]
 
 algVals :: RealFloat a => [(String, a,a,a)] --(name, x, sin x, cos x)
 algVals = [("  pi/12",   pi/12, (sqrt 6 - sqrt 2)/4  , (sqrt 6 + sqrt 2)/4  )
@@ -198,8 +198,8 @@ algVals = [("  pi/12",   pi/12, (sqrt 6 - sqrt 2)/4  , (sqrt 6 + sqrt 2)/4  )
 -- Although sensible to a point, sin 1e300 is pretty random and would not be sensible to use.
 
 largeTrigTests :: (RealFloat a, Show a) => [Test a (Expected a)]
-largeTrigTests =  [Test "LargeTrig" "sin" (show x) (sin x) (A $ sinLarge x) | x <- bigNums]
-               ++ [Test "LargeTrig" "cos" (show x) (cos x) (A $ cosLarge x) | x <- bigNums]
+largeTrigTests =  [Test "sin" (show x) (sin x) (A $ sinLarge x) | x <- bigNums]
+               ++ [Test "cos" (show x) (cos x) (A $ cosLarge x) | x <- bigNums]
 
 sinLarge :: RealFloat a => a -> a
 sinLarge = fromRational . sinTay . mod2pi
@@ -233,8 +233,8 @@ smallNums = ns ++ map negate ns where
 -- Only useful where formulae cutover from one expression to another.
 
 monotonTests :: (RealFloat a, Show a) => [Test a (Expected a)]
-monotonTests = concat [[Test "Monoton" "asinh" (show xup  ) yup   (SI y0)
-                       ,Test "Monoton" "asinh" (show xdown) ydown (SD y0)
+monotonTests = concat [[Test "asinh" (show xup  ) yup   (SI y0)
+                       ,Test "asinh" (show xdown) ydown (SD y0)
                        ]
                       | (f, x0) <- monotonTestPoints
                       , let (y0, xup,   yup)   = yStep nextUp   f x0

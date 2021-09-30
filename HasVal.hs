@@ -47,10 +47,9 @@ hasFltVal bps x (A y) | isNaN y          = isNaN x
 hasFltVal bps x (SI s) = s < x && x - s < 1/2^bps
 hasFltVal bps x (SD s) = s > x && s - x < 1/2^bps
 
-data Test a b = Test Cat Name Val a b
+data Test a b = Test Name Val a b
   deriving Show
 
-type Cat  = String
 type Name = String
 type Val  = String
 
@@ -59,7 +58,8 @@ putFails label tests | null fails   = putStrLn $ label ++ " passed."
                      | otherwise = do
   putStrLn $ label ++ " FAILURES:"
   traverse_ putFail fails
+  putStrLn ""
   where
-    fails = filter (\(Test _ _ _ value expected) -> not (value `hasVal` expected)) tests
-    putFail (Test c n v value expected) = putStrLn $ c++" "++n++" "++v++" sb "++show expected++" is "++show value
+    fails = filter (\(Test _ _ value expected) -> not (value `hasVal` expected)) tests
+    putFail (Test n v value expected) = putStrLn $ n++" "++v++" sb "++show expected++" is "++show value
 
