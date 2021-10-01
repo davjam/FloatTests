@@ -120,8 +120,8 @@ acosh z = F.asinh(realPart(conjugate(sqrt(z-:1)) * sqrt(z+:1)))
 iTimes :: RealFloat a => Complex a -> Complex a
 iTimes (x:+y) = (-y) :+ x
 
-atanh (1:+y@0) | isNegativeZero y = 1/0 :+ (-0)
-               | otherwise        = 1/0 :+ 0
+atanh (1:+y@0) = 1/0 :+ y
+atanh ((-1):+y@0) = (-1/0) :+ y
 atanh z@(x:+y) | x > th || abs y > th = realPart(1/z) :+ copySign (pi/2) y
                | x == 1               = P.log(P.sqrt(P.sqrt(4+y*y))/P.sqrt(abs y + rh)) :+ copySign (pi/2 + P.atan((abs y + rh)/2)) y / 2
                | otherwise            = ln1p(4*x/(sq(1-x)+sq(abs y + rh)))/4 :+ phase(((1-x)*(1+x) - sq(abs y + rh)) :+ 2*y)/2
@@ -130,6 +130,11 @@ atanh z@(x:+y) | x > th || abs y > th = realPart(1/z) :+ copySign (pi/2) y
     th = P.sqrt maxNonInfiniteFloat / 4
     rh = 1 / th
     ln1p = log1p
+
+--attempt a more simple formula: ("corrected" from initial Complex.hs):
+--atanh z        =  0.5 * (log (z+:1) - log ((-z)+:1))
+--doesn't (and can't) give correct answer for (-0) :+ 2. (should be (-0):+1.10).
+--since log (z+:1) = 0.804:+1.1,  log ((-z)+:1)) = 0.804:+(-1.1), and the diff can't have real -0.0.
 
 sq :: Num a => a -> a
 sq x = x * x

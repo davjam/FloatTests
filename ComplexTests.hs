@@ -5,8 +5,8 @@ import HasVal
 import Data.Complex
 
 -- uncomment these for my fixes:
---import Prelude hiding (sqrt, log, tan, asin, acos, tanh, atan, asinh, acosh, atanh)
---import MyComplex 
+-- import Prelude hiding (sqrt, log, tan, asin, acos, tanh, atan, asinh, acosh, atanh)
+-- import MyComplex 
 
 ------------------------------------
 --Tests
@@ -15,6 +15,7 @@ import Data.Complex
 main :: IO ()
 main = do
   putFails "Conjugate Double" (conjTests @Double)
+  putFails "Conjugate Float"  (conjTests @Float )
 
 conjTests :: forall a. (RealFloat a, Show a) => [Test (Complex a) (Complex (Expected a))]
 conjTests = [Test name (show z) (f $ conjugate z) (A u :+ A v)
