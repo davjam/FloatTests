@@ -1,23 +1,16 @@
-/*
-These are the suggested fixes to
-https://github.com/mirror/mingw-w64/blob/master/mingw-w64-crt/math/x86/asinh.c and atanh.c.
-I've also included a copy of https://github.com/mirror/mingw-w64/blob/master/mingw-w64-crt/math/x86/fastmath.h
-to check it compiles.
-
-The same changes are needed for float, double, long double (anything else) versions?
-*/
-
+/**
+ * This file has no copyright assigned and is placed in the Public Domain.
+ * This file is part of the mingw-w64 runtime package.
+ * No warranty is given; refer to the file DISCLAIMER.PD within this package.
+ */
 #include <math.h>
-#include <float.h>
 #include <errno.h>
+#include <float.h>
 #include "fastmath.h"
 
+ /* asinh(x) = copysign(log(fabs(x) + sqrt(x * x + 1.0)), x) */
 double asinh(double x)
 {
-  /* mathematically:
-     asinh(z) = log (z + sqrt (z * z + 1.0))
-  */
-
   double z;
   if (!isfinite (x))
     return x;
@@ -29,11 +22,25 @@ double asinh(double x)
     return x;
 #endif
 
+  /* NB the previous formula
+          z = __fast_log1p (z + z * z / (__fast_sqrt (z * z + 1.0) + 1.0));
+     was defective in two ways:
+     1: It ommitted required brackets:
+          z = __fast_log1p (z + z * (z / (__fast_sqrt (z * z + 1.0) + 1.0)));
+                                    ^                                     ^
+        so would still overflow for large z.
+     2: Even with the brackets, it still degraded quickly for large z
+        (where z*z+1 == z*z).
+        e.g. asinh (sinh 356.0)) gave 355.30685281944005
+    */
+
   const double asinhCutover = pow(2,DBL_MAX_EXP/2); // 1.3407807929943e+154
 
   if (z < asinhCutover)
-  /* Use log1p to avoid cancellation with small x. Put
-     x * x in denom, so overflow is harmless. 
+  /* After excluding large values, the rearranged formula gives better results
+     the original formula log(z + sqrt(z * z + 1.0)) for very small z.
+        e.g. rearranged asinh(sinh 2e-301)) = 2e-301
+             original   asinh(sinh 2e-301)) = 0.
      asinh(z) = log   (z + sqrt (z * z + 1.0))
               = log1p (z + sqrt (z * z + 1.0) - 1.0)
               = log1p (z + (sqrt (z * z + 1.0) - 1.0)
@@ -42,8 +49,8 @@ double asinh(double x)
               = log1p (z + ((z * z + 1.0) - 1.0)
                          / (sqrt (z * z + 1.0) + 1.0))
               = log1p (z + z * z / (sqrt (z * z + 1.0) + 1.0))
-     */
-    z = __fast_log1p (z + z * z / (__fast_sqrt (z * z + 1.0) + 1.0));
+    */
+    z = __fast_log1p (z + z * (z / (__fast_sqrt (z * z + 1.0) + 1.0)));
   else
   /* above this, z*z+1 == z*z, so we can simplify
      (and avoid z*z being infinity).
@@ -51,47 +58,17 @@ double asinh(double x)
                = log (z + sqrt (z * z      ))
                = log (2 * z)
                = log 2 + log z
-
       Choosing asinhCutover is a little tricky.
       We'd like something that's based on the nature of
       the numeric type (DBL_MAX_EXP, etc).
       If c = asinhCutover, then we need:
          (1) c*c == c*c + 1
-         (2) c*c < Infinity
-         (3) log (2*c) = log 2 + log c.
+         (2) log (2*c) = log 2 + log c.
       For float:
          9.490626562425156e7 is the smallest value that
-         achieves (1), but it fails (3). (It only just fails,
+         achieves (1), but it fails (2). (It only just fails,
          but enough to make the function erroneously non-monotonic).
-         1.3407807929942596e154 is the largest value
-         that achieves (2).
     */
     z = __fast_log(2) + __fast_log(z);
-
-  return copysign(z, x); //ensure 0.0 -> 0.0 and -0.0 -> -0.0.
-}
-
-double atanh(double x)
-{
-  double z;
-  if (isnan (x))
-    return x;
-  z = fabs (x);
-  if (z == 1.0)
-    {
-      errno  = ERANGE;
-      return (x > 0 ? INFINITY : -INFINITY);
-    }
-  if (z > 1.0)
-    {
-      errno = EDOM;
-      return nan("");
-    }
-  /* Rearrange formula to avoid precision loss for small x.
-  atanh(x) = 0.5 * log ((1.0 + x)/(1.0 - x))
-	   = 0.5 * log1p ((1.0 + x)/(1.0 - x) - 1.0)
-           = 0.5 * log1p ((1.0 + x - 1.0 + x) /(1.0 - x)) 
-           = 0.5 * log1p ((2.0 * x ) / (1.0 - x))  */
-  z = 0.5 * __fast_log1p ((z + z) / (1.0 - z));
   return copysign(z, x); //ensure 0.0 -> 0.0 and -0.0 -> -0.0.
 }
