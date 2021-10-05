@@ -8,7 +8,6 @@
 module Main (main) where
 
 import           Data.Foldable
-import           Data.Complex
 import           Numeric
 import           Control.Monad
 import qualified Text.Blaze.Html5                as H
@@ -20,8 +19,9 @@ import qualified Text.Blaze.Svg11.Attributes     as SA
 import           Text.Blaze.Html.Renderer.String    --looks better in browser inspection pane
 import           Text.Printf
 
-import qualified MyComplex                       as C
-import           MyComplex                       ((+:), (-:), iTimes)
+--CHANGE THIS TO TEST EXISTING Data.Complex (DONT FORGET TO CHANGE MAIN)
+--import Data.Complex
+import MyComplex
 
 import Debug.Trace
 
@@ -34,8 +34,9 @@ import Debug.Trace
 
 main :: IO ()
 main = do
-  writeGraphsDoc True FullGraph fixedPlots "TrigDiags\\Fixed.html"
-  writeGraphsDoc True FullGraph currPlots  "TrigDiags\\Curr.html"
+  --CHANGE THIS TOO
+  --writeGraphsDoc True FullGraph currPlots  "TrigDiags\\Curr.html"
+  writeGraphsDoc True FullGraph currPlots "TrigDiags\\Fixed.html"
 
 _t1 :: IO ()  --used for testing little bits
 _t1 = writeGraphsDoc True [ParallelSeg Horiz T R (P0S P0Sd)] [("id", id), ("sin", sin)] "TrigDiags\\Test.html"
@@ -86,41 +87,6 @@ has some kind of "step" change L
 > asin (-1649 :: Complex Float)
 (-1.5707964) :+ 8.317766
 -}
-
-_allPlots :: PlotList
-_allPlots =
-  [ ("id"                     , id                      )
-  , ("\\(z^2\\)"              , \z -> z*z               )
-  , ("sqrt"                   , sqrt                    )
-  , ("C.sqrt"                 , C.sqrt                  )
-  , ("exp"                    , exp                     )
-  , ("log"                    , log                     )
-  , ("C.log"                  , C.log                   )
-  , ("\\((z - 1) / (z + 1)\\)", \z -> (z-:1)/( z+:1)    )
-  , ("\\((1 + z) / (1 - z)\\)", \z -> (z+:1)/(-z+:1)    )
-  , ("sin"                    , sin                     )
-  , ("asin"                   , asin                    )
-  , ("C.asin"                 , C.asin                  )
-  , ("cos"                    , cos                     )
-  , ("acos"                   , acos                    )
-  , ("C.acos"                 , C.acos                  )
-  , ("tan"                    , tan                     )
-  , ("atan"                   , atan                    )
-  , ("C.atan"                 , C.atan                  )
-  , ("sinh"                   , sinh                    )
-  , ("asinh"                  , asinh                   )
-  , ("C.asinh"                , C.asinh                 )
-  , ("cosh"                   , cosh                    )
-  , ("acosh"                  , acosh                   ) -- nb the lisp book has an extra line (0+0i to 0-1i), that I think should not be there(*).
-  , ("C.acosh"                , C.acosh                 )
-  , ("tanh"                   , tanh                    )
-  , ("C.tanh"                 , C.tanh                  )
-  , ("atanh"                  , atanh                   )
-  , ("C.atanh"                , C.atanh                 )
-  , ("\\(\\sqrt{1-z^2}\\)"    , \z -> C.sqrt(-z*z+:1)   )
-  , ("\\(\\sqrt{1+z^2}\\)"    , \z -> C.sqrt( z*z+:1)   )
-  ]
-
 currPlots :: PlotList
 currPlots =
   [ ("id"                     , id                      )
@@ -139,26 +105,6 @@ currPlots =
   , ("acosh"                  , acosh                   ) -- nb the lisp book has an extra line (0+0i to 0-1i), that I think should not be there(*).
   , ("tanh"                   , tanh                    )
   , ("atanh"                  , atanh                   )
-  ]
-
-fixedPlots :: PlotList
-fixedPlots =
-  [ ("id"                     , id                      )
-  , ("sqrt"                   , C.sqrt                  )
-  , ("exp"                    , exp                     )
-  , ("log"                    , C.log                   )
-  , ("sin"                    , sin                     )
-  , ("asin"                   , C.asin                  )
-  , ("cos"                    , cos                     )
-  , ("acos"                   , C.acos                  )
-  , ("tan"                    , C.tan                   )
-  , ("atan"                   , C.atan                  )
-  , ("sinh"                   , sinh                    )
-  , ("asinh"                  , C.asinh                 )
-  , ("cosh"                   , cosh                    )
-  , ("acosh"                  , C.acosh                 )
-  , ("tanh"                   , C.tanh                  )
-  , ("atanh"                  , C.atanh                 )
   ]
 
 graph :: Graphable a => Bool -> a -> Title -> PlotFn -> H.Html
@@ -318,9 +264,11 @@ parallelSegPath (ParallelSeg o tb lr p) = ParamPath (toValue lr <> toValue p) w 
       (Vert , B , R, _    ) -> "yellow"
 
 
-    d = case (tb, p) of
-      (B, P0S _) -> "0.04,0.04"
-      _          -> ""
+    d = case (o, tb, p) of
+      (_,     B, P0S _) -> "0.04,0.04"
+      (Horiz, _, P0S _) -> ""
+      (Horiz, _, _    ) -> "0.08,0.02"
+      _                 -> ""
 
 allAnnuli :: [Annulus]
 allAnnuli = enumerate
@@ -674,3 +622,7 @@ dblVal x = toValue $ showFFloat (Just 3) x ""
 
 enumerate :: (Enum a, Bounded a) => [a]
 enumerate = [minBound .. maxBound]
+
+iTimes :: (RealFloat a) => Complex a -> Complex a
+iTimes (x:+y) = (-y) :+ x
+

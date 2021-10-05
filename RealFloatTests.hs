@@ -38,7 +38,7 @@ main = do
 -----------------------------------------------------------------------------
 -- INVERSE TESTS
 
-inveseTests :: (RealFloat a, Show a) => [[a]] -> [Test a (Expected a)]
+inveseTests :: (RealFloat a, Show a) => [[a]] -> [Test a]
 inveseTests vals =  [ Test name (show x) (fInv (f x)) (A x)
                     | ((name, f, fInv), xs) <- zip inverses vals
                     , x                     <- xs
@@ -81,7 +81,7 @@ invFlts =  [[-1e10, -10, -1, -1e-20, 1e-20, 1e30]
 -- SPECIAL VALUE TESTS
 -- See IEEE 754 Standards 9.2.1 Special Values for some of these.
 
-specValTests :: (RealFloat a, Show a) => [Test a (Expected a)]
+specValTests :: (RealFloat a, Show a) => [Test a]
 specValTests = [Test name (show x) (f x) expected | Fn name f exps <- fns, (x,expected) <- zip specVals exps]
 
 data Fn a = Fn 
@@ -144,7 +144,7 @@ asinh1 = 0.8813735870195430252326093249797923090281603282616354107532956086
 -- TESTS FOR IDENTITIES.
 -- https://en.wikipedia.org/wiki/Trigonometric_functions#Basic_identities
 
-identityTests :: (RealFloat a, Enum a, Show a) => [Test a (Expected a)]
+identityTests :: (RealFloat a, Enum a, Show a) => [Test a]
 identityTests = [ Test name (show x) (f1 x) (A $ f2 x)
                 | (name, f1, f2) <- identities
                 , x <- smallNums ++ bigNums
@@ -169,7 +169,7 @@ identities = [("sin -x == -sin x"  , sin . negate                             , 
 -- ALGEBRAIC IDENTITY TESTS
 -- https://en.wikipedia.org/wiki/Trigonometric_functions#Simple_algebraic_values
 
-algValTests :: (RealFloat a, Show a) => [Test a (Expected a)]
+algValTests :: (RealFloat a, Show a) => [Test a]
 algValTests = concat [[Test "sin" xName (sin x) (A sinx)
                       ,Test "cos" xName (cos x) (A cosx)
                       ]
@@ -196,7 +196,7 @@ algVals = [("  pi/12",   pi/12, (sqrt 6 - sqrt 2)/4  , (sqrt 6 + sqrt 2)/4  )
 -- TESTS FOR SIN ETC OF HUGE NUMBERS
 -- Although sensible to a point, sin 1e300 is pretty random and would not be sensible to use.
 
-largeTrigTests :: (RealFloat a, Show a) => [Test a (Expected a)]
+largeTrigTests :: (RealFloat a, Show a) => [Test a]
 largeTrigTests =  [Test "sin" (show x) (sin x) (A y) | (x, y) <- zip bigNums largeSins]
                ++ [Test "cos" (show x) (cos x) (A y) | (x, y) <- zip bigNums largeCoss]
 
@@ -257,7 +257,7 @@ smallNums = ns ++ map negate ns where
 -- TESTS FOR MONOTONICITY
 -- Only useful where formulae cutover from one expression to another.
 
-monotonTests :: (RealFloat a, Show a) => [Test a (Expected a)]
+monotonTests :: (RealFloat a, Show a) => [Test a]
 monotonTests = concat [[Test "asinh" (show xup  ) yup   (SI y0)
                        ,Test "asinh" (show xdown) ydown (SD y0)
                        ]
