@@ -3,6 +3,7 @@
 {-# LANGUAGE RankNTypes #-}
 
 import HasVal
+import Double0
 
 --Switch between these to test old / new results:
 --import Data.Complex
@@ -25,12 +26,15 @@ Test TrigDiags with Float.
 
 main :: IO ()
 main = do
+  putFails "Real vs Complex D0"     (realCpxMatchTests @D0)
   putFails "Real vs Complex Double" (realCpxMatchTests @Double)
-  putFails "Real vs Complex Float" (realCpxMatchTests @Float)
+  putFails "Real vs Complex Float"  (realCpxMatchTests @Float)
 
-  putFails "Conjugate Double" (conjTests @Double)
-  putFails "Conjugate Float"  (conjTests @Float )
+  putFails "Conjugate D0"     (conjTests @D0     False)
+  putFails "Conjugate Double" (conjTests @Double True )
+  putFails "Conjugate Float"  (conjTests @Float  True )
 
+  putFails "gnumericTests D0"     (gnumericTests @D0)
   putFails "gnumericTests Double" (gnumericTests @Double)
   putFails "gnumericTests Float"  (gnumericTests @Float)
 
@@ -48,11 +52,13 @@ realCpxMatchTests = concat
   ,let z = x :+ 0; fz = fc z
   ]
 
-conjTests :: forall a. (RealFloat a, Show a) => [Test a]
-conjTests = concat [testC name (show z) (f $ conjugate z) (A u) (A v)
+conjTests :: forall a. (RealFloat a, Show a) => Bool -> [Test a]
+conjTests fTestImagZeros
+  = concat [testC name (show z) (f $ conjugate z) (A u) (A v)
             | (name, _, f) <- allFns
             , x <- xs
             , y <- xs
+            , if fTestImagZeros then True else y /= 0
             , let z = x :+ y
             , let (u:+v) = conjugate $ f z
             ]
