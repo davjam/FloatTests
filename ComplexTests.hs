@@ -17,6 +17,7 @@ log (0 :+ (-0)) == (-Infinity) :+ (-0.0).
 mkPolar is inverse of polar, for all +/- 0, +/- pi combinations.
 check with types that don't support -ve zeros.
 Test TrigDiags with Float.
+atanh with 1, -1, tiny values (less that rh).
 -}
 
 

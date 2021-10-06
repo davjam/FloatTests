@@ -1,6 +1,8 @@
 {-# OPTIONS -Wall -Wpartial-fields #-}
 
-module Double0 (D0, d0) where
+module Double0 (D0, d0, unD0) where
+
+import Text.Printf
 
 newtype D0 = D0 { unD0 :: Double}
   deriving (Eq, Ord)
@@ -12,7 +14,10 @@ d0 = fix0 . D0 where
 
 instance Show D0 where
   show (D0 x) = show x
-  
+
+instance PrintfArg D0 where
+  formatArg = formatArg . unD0
+
 instance  Enum D0  where
     succ      = d0 . succ . unD0
     pred      = d0 . pred . unD0

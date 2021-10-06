@@ -23,6 +23,9 @@ import           Text.Printf
 --import Data.Complex
 import MyComplex
 
+--Import this to test with non-IEEE floats
+--import Double0
+
 import Debug.Trace
 
 ------------------------------------
@@ -37,6 +40,7 @@ main = do
   --CHANGE THIS TOO
   --writeGraphsDoc True FullGraph currPlots  "TrigDiags\\Curr.html"
   writeGraphsDoc True FullGraph currPlots "TrigDiags\\Fixed.html"
+  --writeGraphsDoc True FullGraph currPlots "TrigDiags\\D0Fixed.html"
 
 _t1 :: IO ()  --used for testing little bits
 _t1 = writeGraphsDoc True [ParallelSeg Horiz T R (P0S P0Sd)] [("id", id), ("sin", sin)] "TrigDiags\\Test.html"
@@ -71,6 +75,8 @@ type Title    = String
 type PlotFn   = Pt -> Pt
 type Pt       = Complex R
 type R        = Double
+--type R        = Float
+--type R        = D0
 
 {-
 Keep R as Double
@@ -622,7 +628,3 @@ dblVal x = toValue $ showFFloat (Just 3) x ""
 
 enumerate :: (Enum a, Bounded a) => [a]
 enumerate = [minBound .. maxBound]
-
-iTimes :: (RealFloat a) => Complex a -> Complex a
-iTimes (x:+y) = (-y) :+ x
-
