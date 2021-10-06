@@ -9,28 +9,35 @@
 {-# HLINT ignore "Use tan" #-}
 
 import HasVal
+import Double0
 
 --uncomment these to test revised functions.
--- import Prelude hiding (asinh, atanh)
--- import MyFloat (asinh, atanh)
+import Prelude hiding (asinh, atanh)
+import MyFloat (asinh, atanh)
 
 main :: IO ()
 main = do
-  putFails "Inverses Double" (inveseTests invDbls)
+  putFails "Inverses D0"     (inveseTests $ invDbls @D0)
+  putFails "Inverses Double" (inveseTests $ invDbls @Double)
   putFails "Inverses Float"  (inveseTests invFlts)
 
+  putFails "Special Value D0"     (specValTests @D0)
   putFails "Special Value Double" (specValTests @Double)
   putFails "Special Value Float"  (specValTests @Float )
 
+  putFails "Identity D0"     (identityTests @D0)
   putFails "Identity Double" (identityTests @Double)
   putFails "Identity Float"  (identityTests @Float )
 
+  putFails "Algebraic Values D0"     (algValTests @D0)
   putFails "Algebraic Values Double" (algValTests @Double)
   putFails "Algebraic Values Float"  (algValTests @Float )
 
+  putFails "Large Trig D0"     (largeTrigTests @D0)
   putFails "Large Trig Double" (largeTrigTests @Double)
   putFails "Large Trig Float"  (largeTrigTests @Float )
 
+  putFails "Monotonicity D0"     (monotonTests @D0)
   putFails "Monotonicity Double" (monotonTests @Double)
   putFails "Monotonicity Float"  (monotonTests @Float )
 
@@ -55,7 +62,7 @@ inverses = [( "recip"      , recip , recip )
            ,( "atanh.tanh" , tanh  , atanh )
            ]
 
-invDbls :: [[Double]]
+invDbls :: (RealFloat a, Enum a) => [[a]]
 invDbls =  [[-1e20, -1e3, -1, -1e-40, 1e-40, 1e90]
            ,[-10, -5 .. 300]
            ,[-1.5, -1.4 .. 1.5]

@@ -3,6 +3,8 @@
 module HasVal (Expected(..), HasVal(..), Test(..), putFails)
 where
 
+import Double0
+
 import Data.Foldable
 
 data Expected a = E a    --exactly
@@ -16,6 +18,9 @@ class HasVal a where
   hasVal :: a -> Expected a -> Bool
 
 instance HasVal Double where
+  x `hasVal` y = hasFltVal 36 x y
+ 
+instance HasVal D0 where
   x `hasVal` y = hasFltVal 36 x y
  
 instance HasVal Float where
