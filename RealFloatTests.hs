@@ -89,7 +89,11 @@ invFlts =  [[-1e10, -10, -1, -1e-20, 1e-20, 1e30]
 -- See IEEE 754 Standards 9.2.1 Special Values for some of these.
 
 specValTests :: (RealFloat a, Show a) => [Test a]
-specValTests = [Test name (show x) (f x) expected | Fn name f exps <- fns, (x,expected) <- zip specVals exps]
+specValTests = [Test name (show x) (f x) expected 
+               |Fn name f exps <- fns
+               ,(x,expected,isNegZero) <- zip3 specVals exps isNegZeros
+               ,isIEEE x || not isNegZero
+               ]
 
 data Fn a = Fn 
   String          --name
@@ -98,6 +102,8 @@ data Fn a = Fn
 
 specVals :: RealFloat a => [a]
 specVals =                              [  nan,     -inf , -mx       ,     -1      ,     -0  ,      0  ,     1     ,     mx   ,     inf ]
+isNegZeros :: [Bool]
+isNegZeros =                            [False,    False , False     ,  False      ,   True  ,  False  , False     ,  False   ,   False ]
 
 fns :: RealFloat a => [Fn a]                               
 fns = [Fn "recip"         recip         [E nan, E $ -0   , A $  -0   , E $ -1      , E $ -inf, E $  inf, E $ 1     , A $ 0    , E $ 0   ]

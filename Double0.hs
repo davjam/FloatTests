@@ -8,9 +8,9 @@ newtype D0 = D0 { unD0 :: Double}
   deriving (Eq, Ord)
 
 d0 :: Double -> D0
-d0 = fix0 . D0 where
-    fix0 (D0 0) = D0 0    --also maps -0.0 to 0.
-    fix0 x      = x
+d0 = D0 . fix0 where
+    fix0 0 = 0    --also maps -0.0 to 0.
+    fix0 x = x
 
 instance Show D0 where
   show (D0 x) = show x
