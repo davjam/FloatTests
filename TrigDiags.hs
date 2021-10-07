@@ -40,10 +40,11 @@ main = do
   --CHANGE THIS TOO
   --writeGraphsDoc True FullGraph currPlots  "TrigDiags\\Curr.html"
   writeGraphsDoc True FullGraph currPlots "TrigDiags\\Fixed.html"
+  --writeGraphsDoc True FullGraph currPlots "TrigDiags\\FloatFixed.html"
   --writeGraphsDoc True FullGraph currPlots "TrigDiags\\D0Fixed.html"
 
 _t1 :: IO ()  --used for testing little bits
-_t1 = writeGraphsDoc True [ParallelSeg Horiz T R (P0S P0Sd)] [("id", id), ("sin", sin)] "TrigDiags\\Test.html"
+_t1 = writeGraphsDoc True [AnnulusSectorSeg A3 7 CO] [("id", id), ("acosh", acosh)] "TrigDiags\\Test.html"
 
 writeGraphsDoc :: Graphable a => Bool -> a -> PlotList -> FilePath -> IO ()
 writeGraphsDoc includeAxes graphable plotList filePath = writeFile filePath $ renderHtml $ graphsDoc includeAxes graphable plotList
@@ -309,7 +310,9 @@ annulusSectorSegPath (AnnulusSectorSeg a s p) = ParamPath (toValue p) 0.01 "blac
     --don't go right into corners, since they sometimes fail.
     --(and sometimes with horrid discontinuities, e.g. atanh on A2 7 R2).
     --we can't add tiny (it gets lost due to lack of precision), so add this instead.
-    inset (x,y) = (x + small, y - small) where small = 0.0000001
+    --Also mkPolar 2 pi have -ve imag, so we need to step back to ensure we don't cross quadrants.
+    --0.000001 works for Float, but 0.0000001 doesn't.
+    inset (x,y) = (x + small, y - small) where small = 0.000001
     --Maybe we should try to convert 0.0 to -0.0 depending on quadrant instead?
     --atanh (1 :+ 0.000000000000000000000001) = 27.97759470620852 :+ 0.7853981633974483
     --atanh (1 :+ 0) = NaN :+ NaN
