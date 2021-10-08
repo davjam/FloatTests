@@ -18,6 +18,8 @@ mkPolar is inverse of polar, for all +/- 0, +/- pi combinations.
 check with types that don't support -ve zeros.
 Test TrigDiags with Float.
 atanh with 1, -1, tiny values (less that rh).
+(esp atanh $ (1) :+ (1e-300) == 177.09 :+ 0.785. WA says 345.7 :+ (-0.785)
+Regression tests vs old Data.Complex.
 -}
 
 ------------------------------------
@@ -89,7 +91,7 @@ data Quadrant = QI | QII | QIII | QIV
   
 branchCutPointQuadrant :: RealFloat a => Function -> Complex a -> Maybe Quadrant
 branchCutPointQuadrant Sqrt  (x:+0) | x < 0    = Just QII
-branchCutPointQuadrant Log   (x:+0) | x < 0    = Just QII
+branchCutPointQuadrant Log   (x:+0) | isNeg x  = Just QII
 branchCutPointQuadrant Asin  (x:+0) | x < (-1) = Just QII
                                     | x > 1    = Just QIV
 branchCutPointQuadrant Acos  (x:+0) | x < (-1) = Just QII
@@ -103,6 +105,11 @@ branchCutPointQuadrant Acosh (x:+0) | x < 0    = Just QII
 branchCutPointQuadrant Atanh (x:+0) | x < (-1) = Just QII
                                     | x > 1    = Just QIV
 branchCutPointQuadrant _     _                 = Nothing
+
+isNeg :: RealFloat a => a -> Bool
+isNeg x | isNegativeZero x = True
+        | x < 0            = True
+        | otherwise        = False
 
 ------------------------------------
 --Tests
@@ -136,7 +143,11 @@ realCpxMatchTests = concat
   , x <- xs
   , let fx = fnR fn x
   , not $ isNaN fx
-  , let z = x :+ 0; fz = fnF fn z
+  , let z  = x :+ 0
+  --Nearly all points where fnR x is defined are not on branch cuts.
+  --The only exception in log (-0) :+ (+/-0), which has a different result in the complex case.
+  , branchCutPointQuadrant fn z == Nothing
+  , let fz = fnF fn z
   ]
 
 
