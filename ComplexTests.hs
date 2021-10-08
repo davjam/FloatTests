@@ -114,9 +114,9 @@ main = do
   putFails "Real vs Complex Double" (realCpxMatchTests @Double)
   putFails "Real vs Complex Float"  (realCpxMatchTests @Float)
 
-  putFails "Conjugate D0"     (conjTests @D0     False)
-  putFails "Conjugate Double" (conjTests @Double True )
-  putFails "Conjugate Float"  (conjTests @Float  True )
+  putFails "Conjugate D0"     (conjTests @D0    )
+  putFails "Conjugate Double" (conjTests @Double)
+  putFails "Conjugate Float"  (conjTests @Float )
 
   putFails "gnumericTests D0"     (gnumericTests @D0)
   putFails "gnumericTests Double" (gnumericTests @Double)
@@ -139,15 +139,19 @@ realCpxMatchTests = concat
   , let z = x :+ 0; fz = fnF fn z
   ]
 
-conjTests :: forall a. (RealFloat a, Show a) => Bool -> [Test a]
-conjTests fTestImagZeros = concat
+
+--For non-IEEE values, don't test points on branch cuts, since:
+-- if it's on the real line, conjugate is same value, and both will be mapped to the same quadrant.
+-- it it's on the imag line, it's one of atan or asinh. For both, +ve imag maps to QI  and -ve imag to QIII, hence won't be conjugates.
+conjTests :: forall a. (RealFloat a, Show a) => [Test a]
+conjTests = concat
   [ testC (fnName fn) (show z) (f $ conjugate z) (A u) (A v)
   | fn <- allFunctions
   , let f = fnF fn
   , x <- xs
   , y <- xs
-  , if fTestImagZeros then True else y /= 0
   , let z = x :+ y
+  , isIEEE x || branchCutPointQuadrant fn z == Nothing
   , let (u:+v) = conjugate $ f z
   ]
 
