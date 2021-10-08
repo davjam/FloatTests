@@ -20,6 +20,89 @@ Test TrigDiags with Float.
 atanh with 1, -1, tiny values (less that rh).
 -}
 
+------------------------------------
+--The functions to test
+------------------------------------
+
+data Function = Sqrt | Exp | Log
+              | Sin | Asin | Cos | Acos | Tan | Atan
+              | Sinh | Asinh | Cosh | Acosh | Tanh | Atanh
+  deriving (Eq, Show, Enum, Bounded)
+
+allFunctions :: [Function]
+allFunctions = [minBound..maxBound]
+
+fnName :: Function -> String
+fnName Sqrt  = "sqrt"
+fnName Exp   = "exp"
+fnName Log   = "log"
+fnName Sin   = "sin"
+fnName Cos   = "cos"  
+fnName Tan   = "tan"  
+fnName Asin  = "asin" 
+fnName Acos  = "acos" 
+fnName Atan  = "atan" 
+fnName Sinh  = "sinh" 
+fnName Cosh  = "cosh" 
+fnName Tanh  = "tanh" 
+fnName Asinh = "asinh"
+fnName Acosh = "acosh"
+fnName Atanh = "atanh"
+
+fnF :: RealFloat a => Function -> Complex a -> Complex a
+fnF Sqrt  = sqrt
+fnF Exp   = exp
+fnF Log   = log
+fnF Sin   = sin
+fnF Cos   = cos  
+fnF Tan   = tan  
+fnF Asin  = asin 
+fnF Acos  = acos 
+fnF Atan  = atan 
+fnF Sinh  = sinh 
+fnF Cosh  = cosh 
+fnF Tanh  = tanh 
+fnF Asinh = asinh
+fnF Acosh = acosh
+fnF Atanh = atanh
+
+--see https://stackoverflow.com/questions/69450017/mapping-over-rankntypes-functions for explanation of this apparent dup
+fnR :: RealFloat a => Function -> a -> a  
+fnR Sqrt  = sqrt
+fnR Exp   = exp
+fnR Log   = log
+fnR Sin   = sin
+fnR Cos   = cos  
+fnR Tan   = tan  
+fnR Asin  = asin 
+fnR Acos  = acos 
+fnR Atan  = atan 
+fnR Sinh  = sinh 
+fnR Cosh  = cosh 
+fnR Tanh  = tanh 
+fnR Asinh = asinh
+fnR Acosh = acosh
+fnR Atanh = atanh
+
+data Quadrant = QI | QII | QIII | QIV
+  deriving (Eq, Show)
+  
+branchCutPointQuadrant :: RealFloat a => Function -> Complex a -> Maybe Quadrant
+branchCutPointQuadrant Sqrt  (x:+0) | x < 0    = Just QII
+branchCutPointQuadrant Log   (x:+0) | x < 0    = Just QII
+branchCutPointQuadrant Asin  (x:+0) | x < (-1) = Just QII
+                                    | x > 1    = Just QIV
+branchCutPointQuadrant Acos  (x:+0) | x < (-1) = Just QII
+                                    | x > 1    = Just QIV
+branchCutPointQuadrant Atan  (0:+y) | y < (-1) = Just QIII
+                                    | y > 1    = Just QI
+branchCutPointQuadrant Asinh (0:+y) | y < (-1) = Just QIII
+                                    | y > 1    = Just QI
+branchCutPointQuadrant Acosh (x:+0) | x < 0    = Just QII
+                                    | x < 1    = Just QI
+branchCutPointQuadrant Atanh (x:+0) | x < (-1) = Just QII
+                                    | x > 1    = Just QIV
+branchCutPointQuadrant _     _                 = Nothing
 
 ------------------------------------
 --Tests
@@ -39,85 +122,87 @@ main = do
   putFails "gnumericTests Double" (gnumericTests @Double)
   putFails "gnumericTests Float"  (gnumericTests @Float)
 
+--create a list of two tests, one for the realPart and one for the imagPart.
+testC :: String -> String -> Complex a -> Expected a -> Expected a -> [Test a]
+testC name val (x:+y) u v = [Test name (val++"(R)") x u, Test name (val++"(I)") y v]
 
 ------------------------------------
--- Basic tests (real vs complex, conjugation
+-- Basic tests (real vs complex, conjugation)
 
 realCpxMatchTests :: (RealFloat a, Show a) => [Test a]
 realCpxMatchTests = concat
-  [testC name (show z) fz (A fx) (A 0)
-  |(name, f, fc) <- allFns
-  ,x <- xs
-  ,let fx = f x
-  ,not $ isNaN fx
-  ,let z = x :+ 0; fz = fc z
+  [ testC (fnName fn) (show z) fz (A fx) (A 0)
+  | fn <- allFunctions
+  , x <- xs
+  , let fx = fnR fn x
+  , not $ isNaN fx
+  , let z = x :+ 0; fz = fnF fn z
   ]
 
 conjTests :: forall a. (RealFloat a, Show a) => Bool -> [Test a]
-conjTests fTestImagZeros
-  = concat [testC name (show z) (f $ conjugate z) (A u) (A v)
-            | (name, _, f) <- allFns
-            , x <- xs
-            , y <- xs
-            , if fTestImagZeros then True else y /= 0
-            , let z = x :+ y
-            , let (u:+v) = conjugate $ f z
-            ]
-
-testC :: String -> String -> Complex a -> Expected a -> Expected a -> [Test a]
-testC name val (x:+y) u v = [Test name (val++"(R)") x u, Test name (val++"(I)") y v]
+conjTests fTestImagZeros = concat
+  [ testC (fnName fn) (show z) (f $ conjugate z) (A u) (A v)
+  | fn <- allFunctions
+  , let f = fnF fn
+  , x <- xs
+  , y <- xs
+  , if fTestImagZeros then True else y /= 0
+  , let z = x :+ y
+  , let (u:+v) = conjugate $ f z
+  ]
 
 xs :: RealFloat a => [a]
 xs = [-5, -4, -pi, -3, e, -2, -pi/2, -1, -0, 0, 1, pi/2, 2, e, 3, pi, 4, 5]
   where e = exp 1
 
---see https://stackoverflow.com/questions/69450017/mapping-over-rankntypes-functions for explanation of dup cols.
-allFns :: RealFloat a => [(String, a -> a, Complex a -> Complex a)]
-allFns =
-  [ ("sqrt"                   , sqrt   , sqrt                    )
-  , ("exp"                    , exp    , exp                     )
-  , ("log"                    , log    , log                     )
-  , ("sin"                    , sin    , sin                     )
-  , ("asin"                   , asin   , asin                    )
-  , ("cos"                    , cos    , cos                     )
-  , ("acos"                   , acos   , acos                    )
-  , ("tan"                    , tan    , tan                     )
-  , ("atan"                   , atan   , atan                    )
-  , ("sinh"                   , sinh   , sinh                    )
-  , ("asinh"                  , asinh  , asinh                   )
-  , ("cosh"                   , cosh   , cosh                    )
-  , ("acosh"                  , acosh  , acosh                   )
-  , ("tanh"                   , tanh   , tanh                    )
-  , ("atanh"                  , atanh  , atanh                   )
-  ]
-
 ------------------------------------
--- Tests vs external calculation (Gnumeric
+-- Tests vs external calculation (by Gnumeric spreadsheet).
+
+--All of these expected values come from gnumeric, which doesn't support negative zeros.
+--When testing a value on a branch cut with a signed zero, 
+--make sure we push it into the quadrant with continuity before testing against gnumeric.
 
 gnumericTests :: (RealFloat a, Show a) => [Test a]
-gnumericTests = concatMap testFn tests where
-  testFn (name, f, ys) = concat $ zipWith testVal zs ys where
-    testVal x (C (u:+v)) = testC name (show x) (f x) (A u) (A v)
+gnumericTests = concatMap testFn allFunctions where
+  testFn fn = concat $ zipWith testVal zs (fnYs fn) where
+    testVal z (C (u:+v)) | isIEEE u  = testC (fnName fn) (show z') (fnF fn z') (A u) (A v)
+                         | otherwise = testC (fnName fn) (show z ) (fnF fn z ) (A u) (A v)
+      where z' | Just q <- branchCutPointQuadrant fn z = pushToQuadrant q z
+               | otherwise                             =                  z
     testVal _ Err        = []
   zs = [x:+y|y<-xs2,x<-xs2] where xs2 = [-3,-2,-1,0,1,2,3]
-  tests = [("sqrt",  sqrt,  sqrts  )
-          ,("exp",   exp,   exps   )
-          ,("log",   log,   logs   )
-          ,("sin",   sin,   sins   )
-          ,("cos",   cos,   coss   )
-          ,("tan",   tan,   tans   )
-          ,("asin",  asin,  asins  )
-          ,("acos",  acos,  acoss  )
-          ,("atan",  atan,  atans  )
-          ,("sinh",  sinh,  sinhs  )
-          ,("cosh",  cosh,  coshs  )
-          ,("tanh",  tanh,  tanhs  )
-          ,("asinh", asinh, asinhs )
-          ,("acosh", acosh, acoshs )
-          ,("atanh", atanh, atanhs )
-          ]
+
+pushToQuadrant :: RealFloat a => Quadrant -> Complex a -> Complex a
+pushToQuadrant = pushToQuadrant' where
+  pushToQuadrant' QI   (x:+y) = mkPos x :+ mkPos y
+  pushToQuadrant' QII  (x:+y) = mkNeg x :+ mkPos y
+  pushToQuadrant' QIII (x:+y) = mkNeg x :+ mkNeg y
+  pushToQuadrant' QIV  (x:+y) = mkPos x :+ mkNeg y
+
+  mkPos 0 = 0
+  mkPos x = x
+  mkNeg 0 = -0
+  mkNeg x = x
 
 data External a = C a | Err --e.g. a calculation in Excel, Gnumeric, etc.
+
+fnYs :: RealFloat a => Function -> [External (Complex a)]
+fnYs Sqrt  = sqrts 
+fnYs Exp   = exps  
+fnYs Log   = logs  
+fnYs Sin   = sins  
+fnYs Cos   = coss  
+fnYs Tan   = tans  
+fnYs Asin  = asins 
+fnYs Acos  = acoss 
+fnYs Atan  = atans 
+fnYs Sinh  = sinhs 
+fnYs Cosh  = coshs 
+fnYs Tanh  = tanhs 
+fnYs Asinh = asinhs
+fnYs Acosh = acoshs
+fnYs Atanh = atanhs
+
 
 sqrts, exps, logs, sins, coss, tans, asins, acoss, atans, sinhs, coshs, tanhs, asinhs, acoshs, atanhs :: RealFloat a => [External (Complex a)]
 
