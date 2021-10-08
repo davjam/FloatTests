@@ -2,6 +2,7 @@
 
 module Double0 (D0, d0, unD0) where
 
+import GHC.Float
 import Text.Printf
 
 newtype D0 = D0 { unD0 :: Double}
@@ -71,12 +72,9 @@ instance  Floating D0  where
     asinh   (D0 x)         =  d0 $ asinh x
     acosh   (D0 x)         =  d0 $ acosh x
     atanh   (D0 x)         =  d0 $ atanh x
-{-
     log1p   (D0 x)         =  d0 $ log1p x
     expm1   (D0 x)         =  d0 $ expm1 x
-
     log1mexp (D0 x)        =  d0 $ log1mexp x
--}
 
 instance  RealFloat D0  where
     floatRadix _        =  floatRadix  (0::Double)
