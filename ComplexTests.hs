@@ -10,16 +10,12 @@ import Double0
 import MyComplex 
 
 {- TO ADD:
-sqrt((-0):+(-0)), etc.
-complex functions with zero imag match real functions.
-issue 8532: ensure acosh((-1):+0) = 0:+pi.
 log (0 :+ (-0)) == (-Infinity) :+ (-0.0).
 mkPolar is inverse of polar, for all +/- 0, +/- pi combinations.
-check with types that don't support -ve zeros.
-Test TrigDiags with Float.
 atanh with 1, -1, tiny values (less that rh).
 (esp atanh $ (1) :+ (1e-300) == 177.09 :+ 0.785. WA says 345.7 :+ (-0.785)
 Regression tests vs old Data.Complex.
+Tests for log1p etc
 -}
 
 ------------------------------------
@@ -117,6 +113,10 @@ isNeg x | isNegativeZero x = True
 
 main :: IO ()
 main = do
+  putFails "Bug Fix Tests D0"     (bugFixTests @D0)
+  putFails "Bug Fix Tests Double" (bugFixTests @Double)
+  putFails "Bug Fix Tests Float"  (bugFixTests @Float)
+
   putFails "Real vs Complex D0"     (realCpxMatchTests @D0)
   putFails "Real vs Complex Double" (realCpxMatchTests @Double)
   putFails "Real vs Complex Float"  (realCpxMatchTests @Float)
@@ -128,6 +128,26 @@ main = do
   putFails "gnumericTests D0"     (gnumericTests @D0)
   putFails "gnumericTests Double" (gnumericTests @Double)
   putFails "gnumericTests Float"  (gnumericTests @Float)
+
+
+bugFixTests :: (RealFloat a, Show a) => [Test a]
+bugFixTests = concat
+  [let z = (-1):+0  in testC "8532: acosh ((-1):+0) = 0:+pi" (show z) (acosh z) (E 0)     (A pi)
+  ,let z = 1e-20:+0 in testC "atan email #1"                 (show z) (atan  z) (E 1e-20) (E 0)
+  ,let z = 0:+1e-20 in testC "atan email #2"                 (show z) (atan  z) (E 0)     (E 1e-20)
+  ,let z = 0:+0     in testC "log 0"                         (show z) (log   z) (E (-1/0))(E 0)
+  ,let z = 0:+(-0)  in testC "log 0"                         (show z) (log   z) (E (-1/0))(E (-0))
+  ,let z = 0:+0     in testC "8539: 0**2"                    (show z) (z**2   ) (E 0)     (E 0) --MORE NEEDED FOR 8539
+  ]
+
+{-
+email 2 fails since:
+> log1p 4e-20 :: Double
+4.0e-20
+> log1p 4e-20 :: D0
+0.0
+-}
+
 
 --create a list of two tests, one for the realPart and one for the imagPart.
 testC :: String -> String -> Complex a -> Expected a -> Expected a -> [Test a]
