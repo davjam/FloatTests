@@ -1,8 +1,10 @@
+{-# OPTIONS -Wall #-}
+
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE Trustworthy #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE ExplicitForAll #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -237,17 +239,16 @@ instance  (RealFloat a) => Floating (Complex a) where
                     where x = F.asinh(realPart(conjugate(sqrt(z-:1)) * sqrt(z+:1)))
                           y = 2 * atan (imagPart(sqrt(z-:1)) / realPart(sqrt(z+:1)))
 
-    atanh z@(x:+y) = conjugate(atanh'(conjugate z *: b)) *: b
+    atanh w@(u:+_) = conjugate(atanh'(conjugate w *: b)) *: b
       where
-      b = F.copySign 1 x
-      atanh' (  1 :+y@0) =   1/0  :+ y
+      b = F.copySign 1 u
+      atanh' (1:+y@0) = 1/0 :+ y
       atanh' z@(x:+y) | x > th || abs y > th = realPart(1/z) :+ copySign (pi/2) y
                       | x == 1               = log(sqrt(sqrt(4+y*y))/sqrt(abs y + rh)) :+ copySign (pi/2 + atan((abs y + rh)/2)) y / 2
                       | otherwise            = log1p(4*x/(sq(1-x)+sq(abs y + rh)))/4 :+ phase(((1-x)*(1+x) - sq(abs y + rh)) :+ 2*y)/2
-        where
-          th = sqrt maxNonInfiniteFloat / 4
-          rh = 1 / th
-          sq w = w * w
+      th = sqrt maxNonInfiniteFloat / 4
+      rh = 1 / th
+      sq z = z * z
 
     log1p x@(a :+ b)
       | abs a < 0.5 && abs b < 0.5
