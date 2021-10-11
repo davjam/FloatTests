@@ -1,6 +1,6 @@
 {-# OPTIONS -Wall -Wpartial-fields #-}
 {-# LANGUAGE ExplicitForAll, TypeApplications, ScopedTypeVariables #-}
-{-# LANGUAGE RankNTypes #-}
+
 
 import HasVal
 import Double0
@@ -10,8 +10,7 @@ import Double0
 import MyComplex 
 
 {- TO ADD:
-log (0 :+ (-0)) == (-Infinity) :+ (-0.0).
-mkPolar is inverse of polar, for all +/- 0, +/- pi combinations.
+inverse function tests, inc phase is inverse of cis, for all +/- 0, +/- pi combinations.
 atanh with 1, -1, tiny values (less that rh).
 (esp atanh $ (1) :+ (1e-300) == 177.09 :+ 0.785. WA says 345.7 :+ (-0.785)
 Regression tests vs old Data.Complex.
@@ -113,6 +112,10 @@ isNeg x | isNegativeZero x = True
 
 main :: IO ()
 main = do
+--  putFails "sqrt D0"         (sqrtTests @D0)
+  putFails "sqrt Double"     (sqrtTests @Double)
+--  putFails "sqrt Float"      (sqrtTests @Float)
+
   putFails "Bug Fix Tests D0"     (bugFixTests @D0)
   putFails "Bug Fix Tests Double" (bugFixTests @Double)
   putFails "Bug Fix Tests Float"  (bugFixTests @Float)
@@ -121,6 +124,11 @@ main = do
   putFails "Real vs Complex Double" (realCpxMatchTests @Double)
   putFails "Real vs Complex Float"  (realCpxMatchTests @Float)
 
+  putFails "nonNaN D0"        (nonNaNTests @D0        )
+  putFails "nonNaN Double"    (nonNaNTests @Double    )
+  putFails "nonNaN Float"     (nonNaNTests @Float     )
+
+  putFails "Conjugate D0"     (conjTests @D0    )
   putFails "Conjugate D0"     (conjTests @D0    )
   putFails "Conjugate Double" (conjTests @Double)
   putFails "Conjugate Float"  (conjTests @Float )
@@ -132,22 +140,23 @@ main = do
 
 bugFixTests :: (RealFloat a, Show a) => [Test a]
 bugFixTests = concat
-  [let z = (-1):+0  in testC "8532: acosh ((-1):+0) = 0:+pi" (show z) (acosh z) (E 0)     (A pi)
-  ,let z = 1e-20:+0 in testC "atan email #1"                 (show z) (atan  z) (E 1e-20) (E 0)
-  ,let z = 0:+1e-20 in testC "atan email #2"                 (show z) (atan  z) (E 0)     (E 1e-20)
-  ,let z = 0:+0     in testC "log 0"                         (show z) (log   z) (E (-1/0))(E 0)
-  ,let z = 0:+(-0)  in testC "log 0"                         (show z) (log   z) (E (-1/0))(E (-0))
-  ,let z = 0:+0     in testC "8539: 0**2"                    (show z) (z**2   ) (E 0)     (E 0) --MORE NEEDED FOR 8539
+  [
+   let z = (-4):+0     in testC "#20425 #1 sqrt"                (show z) (sqrt z)  (E 0)     (E 2)
+  ,let z = (-4):+(-0)  in testC "#20425 #2 sqrt"                (show z) (sqrt z)  (E 0)     (E (-2))
+  ,let z = (-1):+0     in testC "#8532 #1 acosh"                (show z) (acosh z) (E 0)     (A pi)
+  ,let z = (-1):+0     in testC "#8532 #1 acosh"                (show z) (acosh z) (E 0)     (A pi)
+  ,let z = 1e-20:+0    in testC "atan email #1 atan"            (show z) (atan  z) (E 1e-20) (E 0)
+  ,let z = 0:+1e-20    in testC "atan email #2 atan"            (show z) (atan  z) (E 0)     (E 1e-20)
+  ,let z = 0:+0        in testC "log"                           (show z) (log   z) (E (-1/0))(E 0)
+  ,let z = 0:+(-0)     in testC "log"                           (show z) (log   z) (E (-1/0))(E (-0))
+  ,let z = 0:+0        in testC "#8539 #1 (**2)"                (show z) (z**2   ) (E 0)     (E 0) --MORE NEEDED FOR 8539? (Though I've not changed **)
+  ,let z = (-1):+0     in testC "#4228 #1 atanh"                (show z) (atanh z) (E (-1/0))(E 0)
+  ,let z = ( 1):+0     in testC "#4228 #2 atanh"                (show z) (atanh z) (E ( 1/0))(E 0)
+  ,let z = mx:+0       in testC "exp fixes #1 exp"              (show z) (exp z)   (E ( 1/0))(E 0)
+  ,let z = mx:+(-0)    in testC "exp fixes #2 exp"              (show z) (exp z)   (E ( 1/0))(E (-0))
+  ,let z = (1/0):+(0)  in testC "exp fixes #3 exp"              (show z) (exp z)   (E ( 1/0))(E 0)
+  ,let z = (1/0):+(-0) in testC "exp fixes #4 exp"              (show z) (exp z)   (E ( 1/0))(E (-0))
   ]
-
-{-
-email 2 fails since:
-> log1p 4e-20 :: Double
-4.0e-20
-> log1p 4e-20 :: D0
-0.0
--}
-
 
 --create a list of two tests, one for the realPart and one for the imagPart.
 testC :: String -> String -> Complex a -> Expected a -> Expected a -> [Test a]
@@ -158,7 +167,10 @@ testC name val (x:+y) u v = [Test name (val++"(R)") x u, Test name (val++"(I)") 
 
 realCpxMatchTests :: (RealFloat a, Show a) => [Test a]
 realCpxMatchTests = concat
-  [ testC (fnName fn) (show z) fz (A fx) (A 0)
+  --check imag is zero, but don't care what sign
+  --since it's difficult to predict e.g. cos (3:+0) has -0.0, cos (4:+0) has 0.0.
+  --(Conjugte check with check that cos (3:+0) is conj of cos (3:+(-0)), etc).
+  [ testC (fnName fn) (show z) fz (A fx) Z
   | fn <- allFunctions
   , x <- xs
   , let fx = fnR fn x
@@ -186,9 +198,67 @@ conjTests = concat
   , let (u:+v) = conjugate $ f z
   ]
 
+nonNaNTests :: forall a. (RealFloat a, Show a) => [Test a]
+nonNaNTests = concat
+  [ testC (fnName fn) (show z) (fnF fn z) NNaN NNaN
+  | fn <- allFunctions
+  , x <- extremes
+  , y <- extremes
+  , let z = x :+ y
+  ]
+  where extremes = [-mx, -mn, -0, 0, mn, mx]
+
+sqrtTests ::  forall a. (RealFloat a, Show a) => [Test a]
+sqrtTests = concat $
+     [ testC "sqrt #1  sqrt " (show z) (sqrt z) (E 0)     (A $  sqrt x) | x <- xs, x >= 0, let z = (-x)  :+   0   ] 
+  ++ [ testC "sqrt #2  sqrt " (show z) (sqrt z) (E 0)     (A $ -sqrt x) | x <- xs, x >= 0, let z = (-x)  :+ (-0  )]
+  ++ [ testC "sqrt #3  sqrt " (show z) (sqrt z) (E (1/0)) (E ( 1/0))    | x <- xs ++ bads, let z =   x   :+ ( 1/0)]
+  ++ [ testC "sqrt #4  sqrt " (show z) (sqrt z) (E (1/0)) (E (-1/0))    | x <- xs ++ bads, let z =   x   :+ (-1/0)]
+  ++ [ testC "sqrt #5  sqrt " (show z) (sqrt z) (E (0/0)) (E (0/0))     | x <- xs        , let z = 0/0   :+ x     ]
+  ++ [ testC "sqrt #6  sqrt " (show z) (sqrt z) (E (0/0)) (E (0/0))     | x <- xs        , let z = x     :+ 0/0   ]
+  ++ [ testC "sqrt #7  sqrt " (show z) (sqrt z) (E (0/0)) (E (0/0))     |                  let z = 0/0   :+ 0/0   ]
+  ++ [ testC "sqrt #8  sqrt " (show z) (sqrt z) (E (1/0)) (E (sign0 x)) | x <- xs        , let z = 1/0   :+ x     ]
+  ++ [ testC "sqrt #9  sqrt " (show z) (sqrt z) (E (1/0)) (E (0/0))     |                  let z = 1/0   :+ 0/0   ]
+  ++ [ testC "sqrt #10 sqrt " (show z) (sqrt z) (E (1/0)) (E (0/0))     |                  let z = 1/0   :+ (-(0/0))]
+  ++ [ testC "sqrt #11 sqrt " (show z) (sqrt z) (E 0)     (E (signI x)) | x <- xs        , let z = (-1/0):+ x     ]
+  ++ [ testC "sqrt #12 sqrt " (show z) (sqrt z) (E (0/0)) (E (1/0))     |                  let z = (-1/0):+ 0/0   ]
+  ++ [ testC "sqrt #13 sqrt " (show z) (sqrt z) (E (0/0)) (E (1/0))     |                  let z = (-1/0):+ (-(0/0))] --suspect +/- in expected result is typo in Kahan. 
+  
+sign0 :: RealFloat a => a -> a
+sign0 x | isNegativeZero x = -0
+        | x < 0            = -0
+        | otherwise        =  0
+
+signI :: RealFloat a => a -> a
+signI x | isNegativeZero x = -1/0
+        | x < 0            = -1/0
+        | otherwise        =  1/0
+
 xs :: RealFloat a => [a]
-xs = [-5, -4, -pi, -3, e, -2, -pi/2, -1, -0, 0, 1, pi/2, 2, e, 3, pi, 4, 5]
+xs =  andNegs [0, 1, pi/2, 2, e, 3, pi, 4, 5]
+   ++ andNegs (take 5 $ iterate sqrt mx)
+   ++ andNegs (take 5 $ iterate sqrt mn)
   where e = exp 1
+        andNegs ys = map negate ys ++ ys
+  
+bads :: RealFloat a => [a]
+bads = [1/0, -1/0, 0/0]
+  
+mx :: forall a. RealFloat a => a  
+mx = encodeFloat m n where
+    b = floatRadix a
+    e = floatDigits a
+    (_, e') = floatRange a
+    m = b ^ e - 1
+    n = e' - e
+    a = undefined :: a
+
+mn :: forall a. RealFloat a => a  
+mn = encodeFloat 1 n where
+    e = floatDigits a
+    (e', _) = floatRange a
+    n = e' - e
+    a = undefined :: a
 
 ------------------------------------
 -- Tests vs external calculation (by Gnumeric spreadsheet).

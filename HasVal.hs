@@ -10,6 +10,8 @@ import Data.Foldable
 data Expected a = E a    --exactly
                 | A a    --approximately (but to many sfs)
                 | R      --any real (not Inf, not NaN)
+                | NNaN   --not NaN
+                | Z      --exactly zero, but either + or -.
                 | SI a   --small increment above
                 | SD a   --small decrement below
   deriving Show
@@ -30,6 +32,8 @@ hasFltVal :: RealFloat a => Int -> a -> Expected a -> Bool
 hasFltVal _   x R     | isNaN x          = False
                       | isInfinite x     = False
                       | otherwise        = True
+hasFltVal _   x NNaN  | isNaN x          = False
+                      | otherwise        = True
 hasFltVal _   x (E y) | isNaN y          = isNaN x
                       | isNaN x          = False
                       | isNegativeZero y = isNegativeZero x
@@ -44,6 +48,8 @@ hasFltVal bps x (A y) | isNaN y          = isNaN x
         err = 1/mul
 hasFltVal bps x (SI s) = s < x && x - s < 1/2^bps
 hasFltVal bps x (SD s) = s > x && s - x < 1/2^bps
+hasFltVal _   0 Z      = True
+hasFltVal _   _ Z      = False
 
 data Test a = Test Name Val a (Expected a)
   deriving Show
