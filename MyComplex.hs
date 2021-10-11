@@ -129,6 +129,8 @@ polar z          =  (magnitude z, phase z)
 -- | The nonnegative magnitude of a complex number.
 {-# SPECIALISE magnitude :: Complex Double -> Double #-}
 magnitude :: (RealFloat a) => Complex a -> a
+magnitude (x:+0) =  abs x --else magnitude (tiny :+ 0) fails: k is set to 0, and sqr tiny = 0.
+magnitude (0:+y) =  abs y
 magnitude (x:+y) =  scaleFloat k
                      (sqrt (sqr (scaleFloat mk x) + sqr (scaleFloat mk y)))
                     where k  = max (exponent x) (exponent y)
@@ -179,6 +181,17 @@ instance  (RealFloat a) => Floating (Complex a) where
     {-# SPECIALISE instance Floating (Complex Float) #-}
     {-# SPECIALISE instance Floating (Complex Double) #-}
     pi             =  pi :+ 0
+    exp (x:+y@0)   =  exp x        :+            y  --this needed to fix e.g. sin (0:+huge) s.b. 0:+Infinity, etc
+{-
+    This assumes 0 is not a result of underflow.
+      > exp (709 :+ 3/exp 709)        (we can change 3 to anything we like)
+      8.218407461554972e307 :+ 3.0
+      > exp (710 :+ 3/exp 710)
+      Infinity :+ 0 or Infinity :+ NaN ???
+    If the latter, use this instead:
+    exp (x:+y@0)   | isInfinite x = exp x :+ (x*y)
+                   | otherwise    = exp x :+ y
+-}
     exp (x:+y)     =  expx * cos y :+ expx * sin y
                       where expx = exp x
     log z          =  log (magnitude z) :+ phase z  --see note on phase
@@ -207,13 +220,17 @@ instance  (RealFloat a) => Floating (Complex a) where
                             u'    = sqrt ((magnitude z + abs x) / 2)
                             neg r = isNegativeZero r || r < 0
 
-    sin (x:+y)     =  sin x * cosh y :+ cos x * sinh y
-    cos (x:+y)     =  cos x * cosh y :+ (- sin x * sinh y)
+    --sin (x  :+y  ) =  sin x * cosh y :+ cos x * sinh y  --fails for sin (0:+huge)
+    sin z          = -iTimes (exp (iTimes z) - exp(-iTimes z)) /: 2
+    --cos (x:+y)     =  cos x * cosh y :+ (- sin x * sinh y)
+    cos z          =         (exp (iTimes z) + exp(-iTimes z)) /: 2
 
     -- See Note [Kahan implementations] for a number of the following functions.
     tan z          = -iTimes(tanh(iTimes z))
 
+    sinh (x:+y@0)  =          sinh x :+      y
     sinh (x:+y)    =  cos y * sinh x :+ sin  y * cosh x
+    cosh (x:+y@0)  =          cosh x :+     y
     cosh (x:+y)    =  cos y * cosh x :+ sin y * sinh x
     tanh (x:+y)    | abs(x) > cutover = copySign 1 x :+ copySign 0 y
                    | isInfinite t = p/s :+ 1/t
