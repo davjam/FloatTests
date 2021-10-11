@@ -215,7 +215,7 @@ instance  (RealFloat a) => Floating (Complex a) where
 
     sinh (x:+y)    =  cos y * sinh x :+ sin  y * cosh x
     cosh (x:+y)    =  cos y * cosh x :+ sin y * sinh x
-    tanh (x:+y)    | x > cutover = copySign 1 x :+ copySign 0 y
+    tanh (x:+y)    | abs(x) > cutover = copySign 1 x :+ copySign 0 y
                    | isInfinite t = p/s :+ 1/t
                    | otherwise = (b*p*s :+ t) /: (1+b*s*s)
                       where t = tan y
