@@ -211,7 +211,7 @@ instance  (RealFloat a) => Floating (Complex a) where
       where
         inf = 1/0
         nan = 0/0
-
+{-
     -- Mirror sqrt(-0) == -0.0. Ensure sqrt(0:+(-0)) is 0:+(-0), etc.
     sqrt z@(0:+0)  =  z
     sqrt z@(x:+y)  =  u :+ (if neg y then -v else v)
@@ -219,6 +219,8 @@ instance  (RealFloat a) => Floating (Complex a) where
                             v'    = abs y / (u'*2)
                             u'    = sqrt ((magnitude z + abs x) / 2)
                             neg r = isNegativeZero r || r < 0
+-}
+    sqrt = cSqrt
 
     --sin (x  :+y  ) =  sin x * cosh y :+ cos x * sinh y  --fails for sin (0:+huge)
     sin z          = -iTimes (exp (iTimes z) - exp(-iTimes z)) /: 2
@@ -465,3 +467,99 @@ infixl 7 *:, /:
 -- In addition, for functions that map (real or imaginary) zero to (real or imaginary) zero,
 -- @0.0@ will map to @0.0@ and @-0.0@ will map to @-0.0@ (or, vice-versa, such as for 'negate').
 -- Hence @sqrt(4:+0.0)@ gives @2:+0.@ and @sqrt (4:+(-0.0))@ gives @2:+(-0.0)@.
+
+{-
+Initial copy of Kahan.
+cSSqs :: RealFloat a
+      => Complex a   --z@(x:+y)
+      -> (a, Int)    --(r,k) s.t. r=abs(z/2^k)^2
+cSSqs (x:+y) = (r1,k1) where
+  k0 = 0
+  r0 = x*x+y*y
+  
+  (r1,k1) | (r0 /= r0 || isInfinite r0) && (isInfinite x || isInfinite y) = (1/0, k0)
+          | isInfinite r0 {-|| something-} = let k = floor(logBase 2 (max (abs x) (abs y)))
+                                                 r = sq(scaleFloat (-k) x) + sq(scaleFloat (-k) y)
+                                             in (r,k)
+          | otherwise = (r0, k0)
+  sq z = z * z
+
+
+
+cSqrt :: RealFloat a => Complex a -> Complex a
+cSqrt z@(x:+y) = w1:+n1
+  where
+    (r,k) = cSSqs z
+    r1 | x == x = scaleFloat (-k) (abs x) + sqrt r
+       | otherwise = r
+    (k1, r2) | odd k = ((k - 1) `div` 2, r1)
+             | otherwise = (k `div` 2-1, r1+r1)
+    r3 = scaleFloat k1 (sqrt r2)
+    (w,n) = (r3,y)
+    (w1,n1) | r3 == 0 = (w,n)
+            | otherwise = let n2 = if not (isInfinite n) then (n/r3)/2
+                                                         else n
+                          in if x < 0 then (abs n2, copySign r3 y)
+                                      else (w, n2)
+-}
+
+cSSqs :: RealFloat a
+      => Complex a   --z@(x:+y)
+      -> (a, Int)    --(r,k) s.t. r=abs(z/2^k)^2
+cSSqs (x:+y) = (r1,k1) where
+  k0 = 0
+  x2 = x*x
+  y2 = y*y
+  r0 = x2+y2
+  xUnd = abs x > 0 && x2 < mnNorm
+  yUnd = abs y > 0 && y2 < mnNorm
+  
+  
+  (r1,k1) | (isNaN r0 || isInfinite r0) && (isInfinite x || isInfinite y) = (1/0, k0)
+          | isInfinite r0 || ((xUnd || yUnd) && r0 < lambda / eta) =
+                   let k = logr (max (abs x) (abs y))
+                       r = sq(scaleFloat (-k) x) + sq(scaleFloat (-k) y)
+                   in (r,k)
+          | otherwise = (r0, k0)
+  sq z = z * z
+
+cSqrt :: RealFloat a => Complex a -> Complex a
+cSqrt z@(x:+y) = w1:+n1
+  where
+    (r,k) = cSSqs z
+    r1 | x == x = scaleFloat (-k) (abs x) + sqrt r
+       | otherwise = r
+    (k1, r2) | odd k = ((k - 1) `div` 2, r1)
+             | otherwise = (k `div` 2-1, r1+r1)
+    r3 = scaleFloat k1 (sqrt r2)
+    (w,n) = (r3,y)
+    (w1,n1) | r3 == 0 = (w,n)
+            | otherwise = let n2 = if not (isInfinite n) then (n/r3)/2
+                                                         else n
+                          in if x < 0 then (abs n2, copySign r3 y)
+                                      else (w, n2)
+
+
+logr :: RealFloat a => a -> Int
+logr 0 = undefined
+logr x = floatDigits x + n where (_,n) = decodeFloat x
+
+
+mx, eta, lambda, mnNorm :: forall a. RealFloat a => a
+
+mx = encodeFloat m n where
+    b = floatRadix a
+    e = floatDigits a
+    (_, e') = floatRange a
+    m = b ^ e - 1
+    n = e' - e
+    a = undefined :: a
+
+mnNorm = encodeFloat 1 (n-1) where
+    (_, n) = floatRange a
+    a = undefined :: a
+
+eta = encodeFloat (floatRadix a ^ floatDigits a - 1) (-floatDigits a)
+  where a = undefined :: a
+
+lambda = 4 * (1 - eta)/mx
