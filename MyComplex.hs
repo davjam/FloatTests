@@ -129,11 +129,9 @@ polar z          =  (magnitude z, phase z)
 -- | The nonnegative magnitude of a complex number.
 {-# SPECIALISE magnitude :: Complex Double -> Double #-}
 magnitude :: (RealFloat a) => Complex a -> a
-magnitude (x:+0) =  abs x --else magnitude (tiny :+ 0) fails: k is set to 0, and sqr tiny = 0.
-magnitude (0:+y) =  abs y
 magnitude (x:+y) =  scaleFloat k
                      (sqrt (sqr (scaleFloat mk x) + sqr (scaleFloat mk y)))
-                    where k  = max (exponent x) (exponent y)
+                    where k = exponent (max (abs x) (abs y))  --ensure handles x or y == 0, so magnitude (tiny:+0) works.
                           mk = - k
                           sqr z = z * z
 
@@ -344,11 +342,13 @@ Not all functions are based on Kahan's procedures, since:
               = sqrt q * 2^((k-1) `div` 2)
 -}
 
+-- note complexSqrt((-0):+(+/-0)) gives 0:+(+/-0),
+-- unlike sqrt(-0) which has slighly odd IEEE 754 requirement to be (-0).
 complexSqrt :: RealFloat a => Complex a -> Complex a
 complexSqrt (0:+y@0)                 =      0 :+          y
 complexSqrt (x:+y  ) | isInfinite y  =  abs y :+          y
-               | x >= 0        =      r :+          s
-               | otherwise     =  abs s :+ copySign r y
+                     | x >= 0        =      r :+          s
+                     | otherwise     =  abs s :+ copySign r y
   where
     r | isInfinite x      = 1/0
       | floatRadix x /= 2 = sqrt(scaleFloat k q / 2)  --unlikely. We'll still get overflow for sqrt(huge :+ huge), but we can't used the even/odd logic below
@@ -357,9 +357,8 @@ complexSqrt (x:+y  ) | isInfinite y  =  abs y :+          y
       where
         q = sqrt(sqr(scaleFloat (-k) x) + sqr(scaleFloat (-k) y)) + scaleFloat (-k) (abs x)
         sqr w = w * w
-        k = max (exponent x) (exponent y)
+        k = exponent (max (abs x) (abs y))  --cf magnitude
     s = y/r/2
-
 
 -- | @since 4.8.0.0
 instance Storable a => Storable (Complex a) where
