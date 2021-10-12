@@ -211,16 +211,8 @@ instance  (RealFloat a) => Floating (Complex a) where
       where
         inf = 1/0
         nan = 0/0
-{-
-    -- Mirror sqrt(-0) == -0.0. Ensure sqrt(0:+(-0)) is 0:+(-0), etc.
-    sqrt z@(0:+0)  =  z
-    sqrt z@(x:+y)  =  u :+ (if neg y then -v else v)
-                      where (u,v) = if neg x then (v',u') else (u',v')
-                            v'    = abs y / (u'*2)
-                            u'    = sqrt ((magnitude z + abs x) / 2)
-                            neg r = isNegativeZero r || r < 0
--}
-    sqrt = cSqrt
+
+    sqrt = complexSqrt
 
     --sin (x  :+y  ) =  sin x * cosh y :+ cos x * sinh y  --fails for sin (0:+huge)
     sin z          = -iTimes (exp (iTimes z) - exp(-iTimes z)) /: 2
@@ -304,6 +296,70 @@ Not all functions are based on Kahan's procedures, since:
 2. Some of his procedures access the floating point exception flags,
    which are not readily avaiable in Haskell.
 -}
+
+{- complexSqrt
+   Per https://en.wikipedia.org/wiki/Square_root#Algebraic_formula
+
+  sqrt(x:+y) = u :+ copySign v y where 
+
+            [ sqrt(x^2+y^2) + x]
+    u = sqrt[ -----------------]
+            [        2         ]
+
+            [ sqrt(x^2+y^2) - x]
+    v = sqrt[ -----------------]
+            [        2         ]
+
+    Notes:
+
+    1. u * v = abs y/2
+
+                  [ sqrt(x^2+y^2) + abs x]
+    2. if r = sqrt[ ---------------------]
+                  [           2          ]
+
+       then r == u, when x >= 0
+            r == v, when x <= 0
+
+    3. We can scale to avoid some under/over flow.
+
+       let q = [sqrt(x^2+y^2) + abs x]*b^(-k), where b=floatRadix, for some suitable scaling k
+       then r = sqrt(q*b^k/2)
+
+       if b == 2, we can get avoid more under/over flow by also doing:
+
+       if k is even, let k = 2*j
+            r = sqrt(q*2^(2*j)/2)
+              = sqrt(q/2)  * sqrt(2^(2*j))
+              = sqrt(2q/4) * sqrt((2^j)^2)
+              = sqrt(2q)/2 * 2^j
+              = sqrt(2q)   * 2^(j-1)
+              = sqrt(2q)   * 2^(k `div` 2 - 1)
+
+       if k is odd, let k = 2*j + 1
+            r = sqrt(q*2^(2*j+1)/2)
+              = sqrt(q*2^(2*j))
+              = sqrt q * sqrt((2^j)^2)
+              = sqrt q * 2^j
+              = sqrt q * 2^((k-1) `div` 2)
+-}
+
+complexSqrt :: RealFloat a => Complex a -> Complex a
+complexSqrt (0:+y@0)                 =      0 :+          y
+complexSqrt (x:+y  ) | isInfinite y  =  abs y :+          y
+               | x >= 0        =      r :+          s
+               | otherwise     =  abs s :+ copySign r y
+  where
+    r | isInfinite x      = 1/0
+      | floatRadix x /= 2 = sqrt(scaleFloat k q / 2)  --unlikely. We'll still get overflow for sqrt(huge :+ huge), but we can't used the even/odd logic below
+      | even k            = scaleFloat (k `div` 2 - 1) (sqrt (q+q))
+      | otherwise         = scaleFloat ((k-1) `div` 2) (sqrt q)
+      where
+        q = sqrt(sqr(scaleFloat (-k) x) + sqr(scaleFloat (-k) y)) + scaleFloat (-k) (abs x)
+        sqr w = w * w
+        k = max (exponent x) (exponent y)
+    s = y/r/2
+
 
 -- | @since 4.8.0.0
 instance Storable a => Storable (Complex a) where
@@ -468,94 +524,3 @@ infixl 7 *:, /:
 -- @0.0@ will map to @0.0@ and @-0.0@ will map to @-0.0@ (or, vice-versa, such as for 'negate').
 -- Hence @sqrt(4:+0.0)@ gives @2:+0.@ and @sqrt (4:+(-0.0))@ gives @2:+(-0.0)@.
 
-
-{-Per https://en.wikipedia.org/wiki/Square_root#Algebraic_formula
-
-  sqrt(x:+y) = u :+ copySign v y where 
-
-            [ sqrt(x^2+y^2) + x]
-    u = sqrt[ -----------------]
-            [        2         ]
-
-            [ sqrt(x^2+y^2) - x]
-    v = sqrt[ -----------------]
-            [        2         ]
-
-    Note:
-
-    1. u * v = y/2
-
-                  [ sqrt(x^2+y^2) + abs x]
-    2. if r = sqrt[ ---------------------]
-                  [           2          ]
-
-    then r == u, when x >= 0
-         r == v, when x <= 0
--}
-
-cSqrt :: RealFloat a => Complex a -> Complex a
-cSqrt   (0:+y@0)             =     0 :+          y
-cSqrt z@(x:+y  ) | x >= 0    =     r :+          s
-                 | otherwise = abs s :+ copySign r y
-  where
-    r = calc1 z
-    s | isInfinite y = y
-      | otherwise = (y/r)/2
-
-calc1 :: RealFloat a => Complex a -> a
-calc1 z@(x:+_) = scaleFloat k1 (sqrt r2) where --sqrt((sqrt(x^2+y^2)+abs(x))/2), avoiding overflow.
-    (r,k) = cSSqs z --s.t. r = (x^2+y^2)/2^(2*k)
-    r1 | isNaN x = r
-       | otherwise = sqrt r + scaleFloat (-k) (abs x)
-    (k1, r2) | odd k = ((k - 1) `div` 2, r1)  --Non 2 radix
-             | otherwise = (k `div` 2-1, r1+r1)
-
-cSSqs :: RealFloat a
-      => Complex a   --z@(x:+y)
-      -> (a, Int)    --(r,k) s.t. x^2+y^2 = r*2^(2k) (but avoiding over/under flow).
-      --e.g. cSSqs $ 3:+4 = 
-cSSqs (x:+y) | isInfinite x = (1/0, 0)
-             | isInfinite y = (1/0, 0)
-             | isInfinite r0 = scaled
-             | (xUnd || yUnd) && r0 < lambda / eps = scaled
-             | otherwise = (r0, 0)
-  where
-    r0 = x*x+y*y
-    xUnd = abs x > 0 && x*x < mnNorm
-    yUnd = abs y > 0 && y*y < mnNorm
-    scaled = (sq(scaleFloat (-k) x) + sq(scaleFloat (-k) y), k)
-      where k = logr (max (abs x) (abs y))
-            sq z = z * z
-
-_defnsqrt :: RealFloat a => Complex a -> Complex a
-_defnsqrt (x:+y) = sqrt((sqrt(x*x+y*y)+x)/2) :+ copySign (sqrt((sqrt(x*x+y*y)-x)/2)) y
-
-
--- | for any real, non zero x, `logr` returns a value such that
--- | @1 <= abs(scaleFloat (-logr x) x) < floatRadix x@
-logr :: RealFloat a => a -> Int
-logr x | x == 0       = undefined
-       | isNaN x      = undefined
-       | isInfinite x = undefined
-       | otherwise    = floatDigits x + n - 1
-  where (_,n) = decodeFloat x
-
-
-mx, eps, lambda, mnNorm :: forall a. RealFloat a => a
-
-mx = encodeFloat m n where
-    b = floatRadix a
-    e = floatDigits a
-    (_, e') = floatRange a
-    m = b ^ e - 1
-    n = e' - e
-    a = undefined :: a
-
-mnNorm = encodeFloat 1 (n-1) where
-    (_, n) = floatRange a
-    a = undefined :: a
-
-eps = encodeFloat (floatRadix a ^ floatDigits a - 1) (-floatDigits a)
-  where a = undefined :: a
-
-lambda = 4 * (1 - eps)/mx

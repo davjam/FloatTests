@@ -1,4 +1,4 @@
-{-# OPTIONS -Wall -Wpartial-fields #-}
+--{-# OPTIONS -Wall -Wpartial-fields #-}
 {-# LANGUAGE ExplicitForAll, TypeApplications, ScopedTypeVariables #-}
 
 
@@ -112,14 +112,16 @@ isNeg x | isNegativeZero x = True
 
 main :: IO ()
 main = do
---  putFails "sqrt D0"         (sqrtTests @D0)
+  putFails "sqrt D0"         (sqrtTests @D0)
   putFails "sqrt Double"     (sqrtTests @Double)
---  putFails "sqrt Float"      (sqrtTests @Float)
+  putFails "sqrt Float"      (sqrtTests @Float)
+
+  putFails "sqrt extremes"     extremeSqrtTests
 
   putFails "Bug Fix Tests D0"     (bugFixTests @D0)
   putFails "Bug Fix Tests Double" (bugFixTests @Double)
   putFails "Bug Fix Tests Float"  (bugFixTests @Float)
-
+  
   putFails "Real vs Complex D0"     (realCpxMatchTests @D0)
   putFails "Real vs Complex Double" (realCpxMatchTests @Double)
   putFails "Real vs Complex Float"  (realCpxMatchTests @Float)
@@ -136,7 +138,6 @@ main = do
   putFails "gnumericTests D0"     (gnumericTests @D0)
   putFails "gnumericTests Double" (gnumericTests @Double)
   putFails "gnumericTests Float"  (gnumericTests @Float)
-
 
 bugFixTests :: (RealFloat a, Show a) => [Test a]
 bugFixTests = concat
@@ -182,7 +183,6 @@ realCpxMatchTests = concat
   , let fz = fnF fn z
   ]
 
-
 --For non-IEEE values, don't test points on branch cuts, since:
 -- if it's on the real line, conjugate is same value, and both will be mapped to the same quadrant.
 -- it it's on the imag line, it's one of atan or asinh. For both, +ve imag maps to QI  and -ve imag to QIII, hence won't be conjugates.
@@ -223,7 +223,22 @@ sqrtTests = concat $
   ++ [ testC "sqrt #11 sqrt " (show z) (sqrt z) (E 0)     (E (signI x)) | x <- xs        , let z = (-1/0):+ x     ]
   ++ [ testC "sqrt #12 sqrt " (show z) (sqrt z) (E (0/0)) (E (1/0))     |                  let z = (-1/0):+ 0/0   ]
   ++ [ testC "sqrt #13 sqrt " (show z) (sqrt z) (E (0/0)) (E (1/0))     |                  let z = (-1/0):+ (-(0/0))] --suspect +/- in expected result is typo in Kahan. 
-  
+
+extremeSqrtTests :: [Test Double]
+extremeSqrtTests = concat $
+  [ testC "sqrt " (show z) (sqrt z) (A u) (A v) | (z,u:+v) <- extremes ++ ex2]
+  where
+    extremes =
+      [
+        (  mx  :+ mx   , 1.4730945569055654e154 :+ 6.1017574412827022e153)
+      , (  mx  :+ mn   , 1.3407807929942596e154 :+ 0)
+      , (  mn  :+ mn   , 2.45673e-162           :+ 1.01761e-162)
+      , ((-mx) :+ mx   , 6.1017574412827022e153 :+ 1.4730945569055654e154)
+      , ((-mx) :+ mn   , 0                      :+ 1.3407807929942596e154)
+      , ((-mn) :+ mn   , 1.01761e-162           :+ 2.45673e-162)
+      ]
+    ex2 = [(conjugate z, conjugate w) | (z,w) <- extremes]
+
 sign0 :: RealFloat a => a -> a
 sign0 x | isNegativeZero x = -0
         | x < 0            = -0
