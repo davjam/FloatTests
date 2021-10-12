@@ -9,6 +9,7 @@ import Data.Foldable
 
 data Expected a = E a    --exactly
                 | A a    --approximately (but to many sfs)
+                | A' a   --like A, but if 0, -0, Inf, -Inf, NaN checked exactly (including sign)
                 | R      --any real (not Inf, not NaN)
                 | NNaN   --not NaN
                 | Z      --exactly zero, but either + or -.
@@ -39,17 +40,27 @@ hasFltVal _   x (E y) | isNaN y          = isNaN x
                       | isNegativeZero y = isNegativeZero x
                       | isNegativeZero x = False
                       | otherwise        = x == y
+hasFltVal bps x (A' y) | isNaN y          = isNaN x
+                       | isNaN x          = False
+                       | isNegativeZero y = isNegativeZero x
+                       | y == 0           = x == y
+                       | isInfinite y     = x == y
+                       | otherwise        = approx bps x y
 hasFltVal bps x (A y) | isNaN y          = isNaN x
                       | isNaN x          = False
                       | isInfinite y     = abs x > 2^(2*bps)
-                      | abs y < err      = abs x < err
-                      | otherwise        = fromIntegral (round $ x/y * mul :: Integer) / mul == 1
-  where mul = 2^bps
-        err = 1/mul
+                      | otherwise        = approx bps x y
 hasFltVal bps x (SI s) = s < x && x - s < 1/2^bps
 hasFltVal bps x (SD s) = s > x && s - x < 1/2^bps
 hasFltVal _   0 Z      = True
 hasFltVal _   _ Z      = False
+
+approx :: RealFloat a => Int -> a -> a -> Bool
+approx bps x y
+  | abs y < err = abs x < err
+  | otherwise   = fromIntegral (round $ x/y * mul :: Integer) / mul == 1
+  where mul = 2^bps
+        err = 1/mul
 
 data Test a = Test Name Val a (Expected a)
   deriving Show
