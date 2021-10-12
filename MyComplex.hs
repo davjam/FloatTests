@@ -468,84 +468,80 @@ infixl 7 *:, /:
 -- @0.0@ will map to @0.0@ and @-0.0@ will map to @-0.0@ (or, vice-versa, such as for 'negate').
 -- Hence @sqrt(4:+0.0)@ gives @2:+0.@ and @sqrt (4:+(-0.0))@ gives @2:+(-0.0)@.
 
-{-
-Initial copy of Kahan.
-cSSqs :: RealFloat a
-      => Complex a   --z@(x:+y)
-      -> (a, Int)    --(r,k) s.t. r=abs(z/2^k)^2
-cSSqs (x:+y) = (r1,k1) where
-  k0 = 0
-  r0 = x*x+y*y
-  
-  (r1,k1) | (r0 /= r0 || isInfinite r0) && (isInfinite x || isInfinite y) = (1/0, k0)
-          | isInfinite r0 {-|| something-} = let k = floor(logBase 2 (max (abs x) (abs y)))
-                                                 r = sq(scaleFloat (-k) x) + sq(scaleFloat (-k) y)
-                                             in (r,k)
-          | otherwise = (r0, k0)
-  sq z = z * z
 
+{-Per https://en.wikipedia.org/wiki/Square_root#Algebraic_formula
 
+  sqrt(x:+y) = u :+ copySign v y where 
 
-cSqrt :: RealFloat a => Complex a -> Complex a
-cSqrt z@(x:+y) = w1:+n1
-  where
-    (r,k) = cSSqs z
-    r1 | x == x = scaleFloat (-k) (abs x) + sqrt r
-       | otherwise = r
-    (k1, r2) | odd k = ((k - 1) `div` 2, r1)
-             | otherwise = (k `div` 2-1, r1+r1)
-    r3 = scaleFloat k1 (sqrt r2)
-    (w,n) = (r3,y)
-    (w1,n1) | r3 == 0 = (w,n)
-            | otherwise = let n2 = if not (isInfinite n) then (n/r3)/2
-                                                         else n
-                          in if x < 0 then (abs n2, copySign r3 y)
-                                      else (w, n2)
+            [ sqrt(x^2+y^2) + x]
+    u = sqrt[ -----------------]
+            [        2         ]
+
+            [ sqrt(x^2+y^2) - x]
+    v = sqrt[ -----------------]
+            [        2         ]
+
+    Note:
+
+    1. u * v = y/2
+
+                  [ sqrt(x^2+y^2) + abs x]
+    2. if r = sqrt[ ---------------------]
+                  [           2          ]
+
+    then r == u, when x >= 0
+         r == v, when x <= 0
 -}
 
+cSqrt :: RealFloat a => Complex a -> Complex a
+cSqrt   (0:+y@0)             =     0 :+          y
+cSqrt z@(x:+y  ) | x >= 0    =     r :+          s
+                 | otherwise = abs s :+ copySign r y
+  where
+    r = calc1 z
+    s | isInfinite y = y
+      | otherwise = (y/r)/2
+
+calc1 :: RealFloat a => Complex a -> a
+calc1 z@(x:+_) = scaleFloat k1 (sqrt r2) where --sqrt((sqrt(x^2+y^2)+abs(x))/2), avoiding overflow.
+    (r,k) = cSSqs z --s.t. r = (x^2+y^2)/2^(2*k)
+    r1 | isNaN x = r
+       | otherwise = sqrt r + scaleFloat (-k) (abs x)
+    (k1, r2) | odd k = ((k - 1) `div` 2, r1)  --Non 2 radix
+             | otherwise = (k `div` 2-1, r1+r1)
+
 cSSqs :: RealFloat a
       => Complex a   --z@(x:+y)
-      -> (a, Int)    --(r,k) s.t. r=abs(z/2^k)^2
-cSSqs (x:+y) = (r1,k1) where
-  k0 = 0
-  x2 = x*x
-  y2 = y*y
-  r0 = x2+y2
-  xUnd = abs x > 0 && x2 < mnNorm
-  yUnd = abs y > 0 && y2 < mnNorm
-  
-  
-  (r1,k1) | (isNaN r0 || isInfinite r0) && (isInfinite x || isInfinite y) = (1/0, k0)
-          | isInfinite r0 || ((xUnd || yUnd) && r0 < lambda / eta) =
-                   let k = logr (max (abs x) (abs y))
-                       r = sq(scaleFloat (-k) x) + sq(scaleFloat (-k) y)
-                   in (r,k)
-          | otherwise = (r0, k0)
-  sq z = z * z
-
-cSqrt :: RealFloat a => Complex a -> Complex a
-cSqrt z@(x:+y) = w1:+n1
+      -> (a, Int)    --(r,k) s.t. x^2+y^2 = r*2^(2k) (but avoiding over/under flow).
+      --e.g. cSSqs $ 3:+4 = 
+cSSqs (x:+y) | isInfinite x = (1/0, 0)
+             | isInfinite y = (1/0, 0)
+             | isInfinite r0 = scaled
+             | (xUnd || yUnd) && r0 < lambda / eps = scaled
+             | otherwise = (r0, 0)
   where
-    (r,k) = cSSqs z
-    r1 | x == x = scaleFloat (-k) (abs x) + sqrt r
-       | otherwise = r
-    (k1, r2) | odd k = ((k - 1) `div` 2, r1)
-             | otherwise = (k `div` 2-1, r1+r1)
-    r3 = scaleFloat k1 (sqrt r2)
-    (w,n) = (r3,y)
-    (w1,n1) | r3 == 0 = (w,n)
-            | otherwise = let n2 = if not (isInfinite n) then (n/r3)/2
-                                                         else n
-                          in if x < 0 then (abs n2, copySign r3 y)
-                                      else (w, n2)
+    r0 = x*x+y*y
+    xUnd = abs x > 0 && x*x < mnNorm
+    yUnd = abs y > 0 && y*y < mnNorm
+    scaled = (sq(scaleFloat (-k) x) + sq(scaleFloat (-k) y), k)
+      where k = logr (max (abs x) (abs y))
+            sq z = z * z
+
+_defnsqrt :: RealFloat a => Complex a -> Complex a
+_defnsqrt (x:+y) = sqrt((sqrt(x*x+y*y)+x)/2) :+ copySign (sqrt((sqrt(x*x+y*y)-x)/2)) y
 
 
+-- | for any real, non zero x, `logr` returns a value such that
+-- | @1 <= abs(scaleFloat (-logr x) x) < floatRadix x@
 logr :: RealFloat a => a -> Int
-logr 0 = undefined
-logr x = floatDigits x + n where (_,n) = decodeFloat x
+logr x | x == 0       = undefined
+       | isNaN x      = undefined
+       | isInfinite x = undefined
+       | otherwise    = floatDigits x + n - 1
+  where (_,n) = decodeFloat x
 
 
-mx, eta, lambda, mnNorm :: forall a. RealFloat a => a
+mx, eps, lambda, mnNorm :: forall a. RealFloat a => a
 
 mx = encodeFloat m n where
     b = floatRadix a
@@ -559,7 +555,7 @@ mnNorm = encodeFloat 1 (n-1) where
     (_, n) = floatRange a
     a = undefined :: a
 
-eta = encodeFloat (floatRadix a ^ floatDigits a - 1) (-floatDigits a)
+eps = encodeFloat (floatRadix a ^ floatDigits a - 1) (-floatDigits a)
   where a = undefined :: a
 
-lambda = 4 * (1 - eta)/mx
+lambda = 4 * (1 - eps)/mx
