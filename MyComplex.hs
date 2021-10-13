@@ -36,17 +36,15 @@ module MyComplex
         -- * Other operations
         , conjugate
         , iTimes
-        -- * operations with complex and real numbers
+        -- * Operations with complex and real numbers
+        -- $ComplexRealOps
         , (+:), (-:), (*:), (/:)
 
-        -- * Principal Values and Branch Cuts
+        -- * Branch Cuts and Principal Values
         -- $BranchCuts
         
         -- ** Explanation
         -- $BranchCutsExp
-        
-        -- ** IEEE 754 (including negative zeros)
-        -- $IEEE754
         )  where
 
 import qualified MyFloat as F
@@ -77,7 +75,7 @@ infix  6  :+
 -- parameter's. For example, @Complex Float@'s 'Ord' instance has similar
 -- problems to `Float`'s.
 --
--- A number of functions have [principal values and branch cuts](#BranchCuts).
+-- A number of functions have [branch cuts and principal values](#BranchCuts).
 data Complex a
   = !a :+ !a    -- ^ forms a complex number from its real and imaginary
                 -- rectangular components.
@@ -107,6 +105,13 @@ imagPart (_ :+ y) =  y
 {-# SPECIALISE conjugate :: Complex Double -> Complex Double #-}
 conjugate        :: Num a => Complex a -> Complex a
 conjugate (x:+y) =  x :+ (-y)
+
+-- | @iTimes z == z * (0:+1)@, but without any rounding issues or loss of negative zero. E.g.
+-- @iTimes((-0):+0) == (-0):+(-0)@
+-- whereas
+-- @((-0):+0)*(0:+1) == (-0):+0@
+iTimes :: (RealFloat a) => Complex a -> Complex a
+iTimes (x:+y) = (-y) :+ x
 
 -- | Form a complex number from polar components of magnitude and phase.
 {-# SPECIALISE mkPolar :: Double -> Double -> Complex Double #-}
@@ -145,6 +150,21 @@ phase :: (RealFloat a) => Complex a -> a
 -- this also ensures log (0 :+ (-0)) is (-Infinity) :+ (-0.0)
 phase (x:+y)     = atan2 y x
 
+-- $ComplexRealOps
+-- These operators combine complex and real numbers, without converting the real numbers to complex first. E.g.
+-- @(3:+(-0)) +: 1 == 4:+(-0)@
+-- whereas
+-- @(3:+(-0)) + 1 == (3:+(-0)) + (1:+0) == 4:+0@
+
+(+:), (-:), (*:), (/:) :: RealFloat a => Complex a -> a -> Complex a
+
+(x:+y) +: r  =  (x+r) :+  y
+(x:+y) -: r  =  (x-r) :+  y
+(x:+y) *: r  =   x*r  :+  y*r
+(x:+y) /: r  =   x/r  :+  y/r
+
+infixl 6 +:, -:
+infixl 7 *:, /:
 
 -- -----------------------------------------------------------------------------
 -- Instances of Complex
@@ -245,10 +265,13 @@ instance  (RealFloat a) => Floating (Complex a) where
 
     asin z@(x:+_)  =  atan(x/r) :+ F.asinh s
                       where r = realPart (sqrt(-z+:1)*sqrt(z+:1))
+                            --NB, conjugate(sqrt w)) /= sqrt(conjugate w) when w doesn't support -0.0.
+                            --(Kahan's formula sqrt(z-1)* is ambiguous, but like this works correctly for IEEE754 and not floats).
                             s = imagPart (conjugate(sqrt(-z+:1))*sqrt(z+:1))
     acos z         =  x :+ y
                       where x = 2 * atan(realPart(sqrt(-z+:1))/realPart(sqrt(z+:1)))
                             y = F.asinh (imagPart(conjugate(sqrt(z+:1))*sqrt(-z+:1)))
+
     atan z         =  -iTimes(atanh(iTimes z))
 
     asinh z        =  -iTimes(asin(iTimes z))
@@ -258,7 +281,7 @@ instance  (RealFloat a) => Floating (Complex a) where
                           y = 2 * atan (imagPart(sqrt(z-:1)) / realPart(sqrt(z+:1)))
     atanh w@(u:+_) = conjugate(atanh'(conjugate w *: b)) *: b
       where
-      b = F.copySign 1 u
+      b = copySign 1 u
       atanh' (1:+y@0) = 1/0 :+ y
       atanh' z@(x:+y) | x > th || abs y > th =  realPart(1/z)
                                              :+ copySign (pi/2) y
@@ -420,98 +443,154 @@ maxNonInfiniteFloat = encodeFloat m n where
     n = e' - e
     a = undefined :: a
 
--- iTimes z == z * (0:+1), but without any rounding issues.
-iTimes :: (RealFloat a) => Complex a -> Complex a
-iTimes (x:+y) = (-y) :+ x
-
--- These operators add integers to complex numbers, preserving negative zeros:
--- (3 :+ (-0.0)) +: 1 == 4 :+ (-0.0)
--- whereas:
--- (3 :+ (-0.0)) +  1 == 4 :+   0.0, since the 1 is converted to 1:+0, and (-0)+0 is 0.
-
-(+:), (-:), (*:), (/:) :: RealFloat a => Complex a -> a -> Complex a
-
-(x:+y) -: z  =  (x-z) :+  y
-(x:+y) +: z  =  (x+z) :+  y
-(x:+y) *: z  =   x*z  :+  y*z
-(x:+y) /: z  =   x/z  :+  y/z
-
-infixl 6 +:, -:
-infixl 7 *:, /:
-
 -- $BranchCuts
 -- #BranchCuts#
 -- 
 -- The "inverse" complex functions have branch cuts and principal values in ranges as follows:
 --
--- +--------------------+------------------------------------------------------+-----------------------------------------------+
--- + (inverse) function + branch cut(s)                                        + range (x:+y) where                            +
--- +====================+======================================================+===============================================+
--- + 'sqrt'             + @[-&#x221E;, -0)@                                    + x >= 0                                        +
--- +--------------------+------------------------------------------------------+-----------------------------------------------+
--- + 'log'              + @[-&#x221E;, -0)@                                    + -&#x03C0; <= y <= -&#x03C0;                   +
--- +--------------------+------------------------------------------------------+-----------------------------------------------+
--- + 'asin'             + @[-&#x221E;, -1)@ and @(1, &#x221E;]@                + -&#x03C0;\/2 <= x <= -&#x03C0;\/2             +
--- +--------------------+------------------------------------------------------+-----------------------------------------------+
--- + 'acos'             + @[-&#x221E;, -1)@ and @(1, &#x221E;]@                + 0 <= x <= -&#x03C0;                           +
--- +--------------------+------------------------------------------------------+-----------------------------------------------+
--- + 'atan'             + @[-&#x221E;/i/, -/i/)@ and @(/i/, &#x221E;/i/]@      + -&#x03C0;\/2 <= x <= -&#x03C0;\/2             +
--- +--------------------+------------------------------------------------------+-----------------------------------------------+
--- + 'asinh'            + @[-&#x221E;/i/, -/i/)@ and @(/i/, &#x221E;/i/]@      + -&#x03C0;\/2 <= y <= -&#x03C0;\/2             +
--- +--------------------+------------------------------------------------------+-----------------------------------------------+
--- + 'acosh'            + @[-&#x221E;, 1)@                                     + x >= 0 and -&#x03C0; <= y <= -&#x03C0;        +
--- +--------------------+------------------------------------------------------+-----------------------------------------------+
--- + 'atanh'            + @[-&#x221E;, -1)@ and @(1, &#x221E;]@                + -&#x03C0;\/2 <= y <= -&#x03C0;\/2             +
--- +--------------------+------------------------------------------------------+-----------------------------------------------+
+-- +--------------------+----------------------------------------------------------+-----------------------------------------------+
+-- + (inverse) function + branch cut(s)                                            + range x or (x:+y) where                       +
+-- +====================+==========================================================+===============================================+
+-- + 'phase'            + @[-&#x221E;, -0]@                                        + -&#x03C0; <= x <= &#x03C0;                    +
+-- +--------------------+----------------------------------------------------------+-----------------------------------------------+
+-- + 'sqrt'             + @[-&#x221E;, -0)@                                        + x >= 0                                        +
+-- +--------------------+----------------------------------------------------------+-----------------------------------------------+
+-- + 'log'              + @[-&#x221E;, -0]@                                        + -&#x03C0; <= y <= -&#x03C0;                   +
+-- +--------------------+----------------------------------------------------------+-----------------------------------------------+
+-- + 'asin'             + @[-&#x221E;, -1)@ and @(1, &#x221E;]@                    + -&#x03C0;\/2 <= x <= -&#x03C0;\/2             +
+-- +--------------------+----------------------------------------------------------+-----------------------------------------------+
+-- + 'acos'             + @[-&#x221E;, -1)@ and @(1, &#x221E;]@                    + 0 <= x <= -&#x03C0;                           +
+-- +--------------------+----------------------------------------------------------+-----------------------------------------------+
+-- + 'atan'             + @[-&#x221E;/i/, -/i/)@ and @(/i/, &#x221E;/i/]@          + -&#x03C0;\/2 <= x <= -&#x03C0;\/2             +
+-- +--------------------+----------------------------------------------------------+-----------------------------------------------+
+-- + 'asinh'            + @[-&#x221E;/i/, -/i/)@ and @(/i/, &#x221E;/i/]@          + -&#x03C0;\/2 <= y <= -&#x03C0;\/2             +
+-- +--------------------+----------------------------------------------------------+-----------------------------------------------+
+-- + 'acosh'            + @[-&#x221E;, 1)@                                         + x >= 0 and -&#x03C0; <= y <= -&#x03C0;        +
+-- +--------------------+----------------------------------------------------------+-----------------------------------------------+
+-- + 'atanh'            + @[-&#x221E;, -1)@ and @(1, &#x221E;]@                    + -&#x03C0;\/2 <= y <= -&#x03C0;\/2             +
+-- +--------------------+----------------------------------------------------------+-----------------------------------------------+
 --
--- The complex to real function 'phase' has branch cut @[-&#x221E;, -0)@ and range [-&#x03C0;, &#x03C0;].
+-- Note that 'phase' maps complex numbers to real numbers
+-- and the other functions map complex numbers to complex numbers.
+-- All of the branch cuts fall on axes.
 --
--- Haskell's branch cuts and ranges are consitant with those in some other languages,
--- such as Common Lisp.
+-- The behaviour of types @Complex a@ for a value on a branch cut is different,
+-- depending on whether floating type @a@ supports signed zeros.
+--
+-- For types that support signed zeros (i.e. IEEE 754 types),
+-- the branch cuts can be considered to be "between" @0.0@ and @-0.0@.
+-- The mappings of @0.0@ will be continuous with those of values greater than @0.0@, and
+-- the mappings of @-0.0@ will be continuous with those of values less than @0.0@.
+--
+-- For types that don't support signed zeros, the mappings of
+-- points on a branch cut are continuous with mappings of points in one of the adjacent quadrants
+-- as indicated in the table below.
+-- In addition, the range of the functions excludes certain values, also indicated in the table.
+-- 
+-- +--------------------+-----------------------------------+-----------------------------------------------------------------------------------------+
+-- + (inverse) function + branch cut(s) continuous with     + range excludes                                                                          +
+-- +====================+===================================+=========================================================================================+
+-- + 'phase'            + QII                               + -&#x03C0;                                                                               +
+-- +--------------------+-----------------------------------+-----------------------------------------------------------------------------------------+
+-- + 'sqrt'             + QII                               + (0, -&#x221E;/i/]                                                                       +
+-- +--------------------+-----------------------------------+-----------------------------------------------------------------------------------------+
+-- + 'log'              + QII                               + [-&#x221E;-&#x03C0;/i/, &#x221E;-&#x03C0;/i/]                                           +
+-- +--------------------+-----------------------------------+-----------------------------------------------------------------------------------------+
+-- + 'asin'             + QII and QIV                       + (-&#x03C0;\/2, -&#x03C0;\/2-&#x221E;/i/], (&#x03C0;\/2, &#x03C0;\/2+&#x221E;/i/]        +
+-- +--------------------+-----------------------------------+-----------------------------------------------------------------------------------------+
+-- + 'acos'             + QII and QIV                       + (0, -&#x221E;/i/], (&#x03C0;, &#x03C0;+&#x221E;/i/]                                     +
+-- +--------------------+-----------------------------------+-----------------------------------------------------------------------------------------+
+-- + 'atan'             + QIII and QI                       + [-&#x03C0;\/2, -&#x03C0;\/2+&#x221E;/i/], [&#x03C0;\/2, &#x03C0;\/2-&#x221E;/i/]        +
+-- +--------------------+-----------------------------------+-----------------------------------------------------------------------------------------+
+-- + 'asinh'            + QIII and QI                       + (-&#x03C0;\/2/i/, &#x221E;-&#x03C0;\/2/i/], (&#x03C0;\/2/i/, -&#x221E;+&#x03C0;\/2/i/]  +
+-- +--------------------+-----------------------------------+-----------------------------------------------------------------------------------------+
+-- + 'acosh'            + QII (x\<0), QI (x\>0)             + (0, -&#x03C0;/i/], [-&#x03C0;/i/, &#x221E;-&#x03C0;/i/]                                 +
+-- +--------------------+-----------------------------------+-----------------------------------------------------------------------------------------+
+-- + 'atanh'            + QII and QIV                       + [-&#x03C0;\/2/i/, -&#x221E;-&#x03C0;\/2/i/], [&#x03C0;\/2/i/, &#x221E;+&#x03C0;\/2/i/]  +
+-- +--------------------+-----------------------------------+-----------------------------------------------------------------------------------------+
+--
+-- where the quadrants are labelled:
+--
+-- +--------------------+---------------+---------------+
+-- +                    + negative real + positive real +
+-- +--------------------+---------------+---------------+
+-- + positive imaginary + QII           + QI            +
+-- +--------------------+---------------+---------------+
+-- + negative imaginary + QIII          + QIV           +
+-- +--------------------+---------------+---------------+
+--
+-- Haskell's branch cuts, continuities and ranges follow the recommendations by Kahan 
+-- (Branch Cuts for Complex Elementary Functions or Much Ado About Nothing's Sign Bit, 1987),
+-- and are consitant with those in some other languages such as Common Lisp.
+--
+-- Note that the result for "positive" @0.0@ (for types that support signed zeros)
+-- is not necessarily the same for the result for (unsigned) @0.0@ (for those that types that don't).
+-- For example:
+--
+-- >>> asin $ 2.0 :+ (0.0) :: Complex SomeIEEEFloatingType
+-- 1.570 :+ 1.316
+-- >>> asin $ 2.0 :+ (0.0) :: Complex SomeNonIEEEFloatingType
+-- 1.570 :+ (-1.316)
 --
 -- $BranchCutsExp
 --
--- Both @(1:+2)^2@ and @((-1):+(-2))^2@ give @(-3):+4@.
--- However the "inverse" function 'sqrt' maps @(-3):+4@ back to only one of these: @1:+2@,
+-- This is an explanation of the above for the function 'sqrt'.
+-- The same principles apply to the other functions.
+--
+-- Consider 'sqrt' of real numbers.
+-- Both @2.0^2@ and @(-2.0)^2@ have the value @4.0@,
+-- but @sqrt 4.0@ returns only @2.0@.
+-- In general 'sqrt' returns only the non-negative square root,
+-- a standard widely adopted.
+-- In other words the range of 'sqrt', over real numbers, is [0, &#x221E;]:
+-- half of the real number line.
+--
+-- @sqrt@ over complex numbers has analagous behaviour.
+-- The square of both @1:+2@ and its negative @(-1):+(-2)@ is the same value @(-3):+4@.
+-- 'sqrt' maps @(-3):+4@ back to only one of these: @1:+2@,
 -- the /principal value/.
--- (This is analagous to 'sqrt' only returning the positive square root of a real number).
--- As a result, the range of these functions is only a limited subset of the complex plane.
--- ('sqrt' doesn't map anything to @(-1):+(-2)@).
+-- The standard principal values for @sqrt@ are those @x:+y@ where @x >= 0@:
+-- half of the complex plane.
 -- 
--- `sqrt` also has a discontinuity, as shown here:
--- 
--- +----------------+-------------------+
--- |            @x@ | @sqrt x@ (approx) |
--- +================+===================+
--- | @(-4):+( 0.2)@ | @0:+( 2)@         |
--- +----------------+-------------------+
--- | @(-4):+( 0.1)@ | @0:+( 2)@         |
--- +----------------+-------------------+
--- | @(-4):+( 0.0)@ | @0:+( 2)@         |
--- +----------------+-------------------+
--- | @(-4):+(-0.1)@ | @0:+(-2)@         |
--- +----------------+-------------------+
--- | @(-4):+(-0.2)@ | @0:+(-2)@         |
--- +----------------+-------------------+
--- 
--- The discontinuity illustrated happens at -4 on the real axis.
--- There would be a similar discontinuity at all other points on the negative real axis
--- (as the imaginary part changes from positive to negative).
--- Hence the negative real axis forms a line of discontinuity, called a /branch cut/.
+-- The table below shows the square of two sequences of complex numbers:
 --
+-- +-------------------------+------------------------+--------------------------+
+-- +    @v@                  +    @w = -v@            + @z = v^2@ (@== w^2@)     +
+-- +=========================+========================+==========================+
+-- +  __@( 0.050):+2.0@__    +   @(-0.050):+(-2.0)@   + @(-4):+( 0.2)@           +
+-- +-------------------------+------------------------+--------------------------+
+-- +  __@( 0.025):+2.0@__    +   @(-0.025):+(-2.0)@   + @(-4):+( 0.1)@           +
+-- +-------------------------+------------------------+--------------------------+
+-- +    @( 0.000):+2.0@      +   @( 0.000):+(-2.0)@   + @(-4):+( 0.0)@           +
+-- +-------------------------+------------------------+--------------------------+
+-- +    @(-0.025):+2.0@      + __@( 0.025):+(-2.0)@__ + @(-4):+(-0.1)@           +
+-- +-------------------------+------------------------+--------------------------+
+-- +    @(-0.050):+2.0@      + __@( 0.050):+(-2.0)@__ + @(-4):+(-0.2)@           +
+-- +-------------------------+------------------------+--------------------------+
+--
+-- Each corresponding @v@ and @w@ has the same square @z@. 
+-- @sqrt@ maps each of these @z@ values back to the principal value
+-- (whichever of @v@ or @w@ has a non-negative real part, as highlighted in bold).
+-- Hence, although the sequence @z@ is continuous, @sqrt z@ is discontinuous,
+-- with the results jumping from a imaginary @2.0@ to imaginary @-2.0@
+-- as the imaginary part of @z@ crosses the real axis.
+--
+-- The discontinuity in 'sqrt' illustrated here happens at -4 on the real axis.
+-- There would be similar discontinuities at all other points on the negative real axis.
+-- Hence the negative real axis @[-&#x221E;, -0)@ forms a line of discontinuity, called a /branch cut/.
 -- The location of the branch cuts and the range of the function are related.
--- In the case of 'sqrt', with the branch cut given above,
--- the range is those complex numbers with non-negative real parts.
 --
--- $IEEE754
+-- In the case of @sqrt $ (-4):+( 0.0)@, either @v@ or @w@ could be chosen, but:
 --
--- Haskell 'Double' and 'Float' types include IEEE 754 values, including negative zeros.
--- For these types, the branch cuts are such that @-0.0@ is continuous with other negative numbers.
--- In the case of 'sqrt', this means the branch cut is on the negative real axis,
--- "between" numbers with imaginary parts @0.0@ and @-0.0@.
--- Hence @sqrt((-4):+(-0))@ is @0:+(-2)@.
+-- * When dealing with floating point numbers that support negative zeros, 
+-- the result is chosen so that
+-- @sqrt $ (-4):+( 0.0)@ is continuous with points @sqrt $ (-4):+y@ where @y>0@, hence @( 0.000):+2.0@, and 
+-- @sqrt $ (-4):+(-0.0)@ is continuous with points @sqrt $ (-4):+y@ where @y<0@, hence @( 0.000):(-2.0)@.
+-- It is helpful to think of the branch cut as being "between" @0.0@ and @-0.0@.
 --
--- In addition, for functions that map (real or imaginary) zero to (real or imaginary) zero,
--- @0.0@ will map to @0.0@ and @-0.0@ will map to @-0.0@ (or, vice-versa, such as for 'negate').
--- Hence @sqrt(4:+0.0)@ gives @2:+0.@ and @sqrt (4:+(-0.0))@ gives @2:+(-0.0)@.
-
+-- * When dealing with floating point numbers that don't support negative zeros, an
+-- arbitrary but standard choice is made.
+-- The standard choice in this case is that @sqrt $ (-4):+( 0.0)@ is @( 0.000):+2.0@.
+-- Hence 'sqrt' of points on the branch cut are continuous with 'sqrt' of points in QII on the complex plane.
+-- In addition, 'sqrt' will not map anything to @( 0.000):+(-2.0)@, or any other point
+-- on the negative imaginary axis (0, -&#x221E;/i/], which is excluded from the range.
