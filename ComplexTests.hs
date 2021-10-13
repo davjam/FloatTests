@@ -157,8 +157,8 @@ bugFixTests = concat
   ,let z = ( 1):+0     in testC False "#4228 #2 atanh"                (show z) (atanh z) (E ( 1/0))(E 0)
   ,let z = mx:+0       in testC False "exp fixes #1 exp"              (show z) (exp z)   (E ( 1/0))(E 0)
   ,let z = mx:+(-0)    in testC False "exp fixes #2 exp"              (show z) (exp z)   (E ( 1/0))(E (-0))
-  ,let z = (1/0):+(0)  in testC False "exp fixes #3 exp"              (show z) (exp z)   (E ( 1/0))(E 0)
-  ,let z = (1/0):+(-0) in testC False "exp fixes #4 exp"              (show z) (exp z)   (E ( 1/0))(E (-0))
+  ,let z = (1/0):+(0)  in testC False "exp fixes #3 exp"              (show z) (exp z)   (E ( 1/0))(E (0/0))
+  ,let z = (1/0):+(-0) in testC False "exp fixes #4 exp"              (show z) (exp z)   (E ( 1/0))(E (-0/0))
   ,let z = mn:+0       in [Test       "magnitude"                     (show z) (magnitude z)  (E mn)]
   ,let z = 0:+mn       in [Test       "magnitude"                     (show z) (magnitude z)  (E mn)]
   ]
@@ -194,7 +194,7 @@ realCpxMatchTests = concat
 -- it it's on the imag line, it's one of atan or asinh. For both, +ve imag maps to QI  and -ve imag to QIII, hence won't be conjugates.
 conjTests :: forall a. (RealFloat a, Show a) => [Test a]
 conjTests = concat
-  [ testC False (fnName fn) (show z) (f $ conjugate z) (A u) (A v)
+  [ testC False (fnName fn) (show z) (f $ conjugate z) (E u) (E v)
   | fn <- allFunctions
   , let f = fnF fn
   , x <- xs
