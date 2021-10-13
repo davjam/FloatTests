@@ -179,15 +179,9 @@ instance  (RealFloat a) => Floating (Complex a) where
     {-# SPECIALISE instance Floating (Complex Float) #-}
     {-# SPECIALISE instance Floating (Complex Double) #-}
     pi             =  pi :+ 0
-{-
-    This assumes 0 is not a result of underflow.
-    If it were, the answer should be different...
-      > exp (709 :+ 3/exp 709)        (we can change 3 to anything we like)
-      8.218407461554972e307 :+ 3.0
-      > exp (710 :+ 3/exp 710)
-      Infinity :+ 0 or Infinity :+ NaN ???
--}
-    exp (x:+y@0)   | isInfinite x = exp x :+ (x*y)
+
+    exp (x:+y@0)   | isInfinite x = exp x :+ (x*y)  --assumes 0 is not a result of underflow.
+                                                    --else should probably return Infinity :+ NaN
                    | otherwise    = exp x :+ y
     exp (x:+y)     =  expx * cos y :+ expx * sin y
                       where expx = exp x
@@ -209,19 +203,37 @@ instance  (RealFloat a) => Floating (Complex a) where
         inf = 1/0
         nan = 0/0
 
-    sqrt = complexSqrt
-    sin (x@0:+y)   =      x          :+         sinh y
-    sin (x  :+y  ) =  sin x * cosh y :+ cos x * sinh y
-    cos (x@0:+y)   =          cosh y :+ (-     x * signum y)
-    cos (x  :+y)   =  cos x * cosh y :+ (- sin x * sinh y)
+    -- See Note [sqrt implementation]
+    -- qrt((-0):+0) is unlike sqrt(-0) which has slighly odd IEEE 754 requirement to be (-0).
+    sqrt (0:+y@0)                 =      0 :+          y
+    sqrt (x:+y  ) | isInfinite y  =  abs y :+          y
+                  | x >= 0        =      r :+          s
+                  | otherwise     =  abs s :+ copySign r y
+      where
+        r | isInfinite x      = 1/0
+          | floatRadix x /= 2 = sqrt(scaleFloat k q / 2)
+          -- other radix unlikely. We'll still get overflow for sqrt(huge :+ huge),
+          -- but we can't used the even/odd logic below
+          | even k            = scaleFloat (k `div` 2 - 1) (sqrt (q+q))
+          | otherwise         = scaleFloat ((k-1) `div` 2) (sqrt q)
+          where
+            q = sqrt(sqr(scaleFloat (-k) x) + sqr(scaleFloat (-k) y)) + scaleFloat (-k) (abs x)
+            sqr w = w * w
+            k = exponent (max (abs x) (abs y))  --cf magnitude
+        s = y/r/2
+
+    --all of these have the same 0 assumption as exp
+    sin  (x@0:+y  )  =      x          :+            sinh y
+    sin  (x  :+y  )  =  sin x * cosh y :+    cos x * sinh y
+    cos  (x@0:+y  )  =          cosh y :+ (-     x *      y)
+    cos  (x  :+y  )  =  cos x * cosh y :+ (- sin x * sinh y)
+    sinh (x  :+y@0)  =          sinh x :+        y
+    sinh (x  :+y  )  =  cos y * sinh x :+    sin y * cosh x
+    cosh (x  :+y@0)  =          cosh x :+        y
+    cosh (x  :+y  )  =  cos y * cosh x :+    sin y * sinh x
 
     -- See Note [Kahan implementations] for a number of the following functions.
     tan z          = -iTimes(tanh(iTimes z))
-
-    sinh (x:+y@0)  =          sinh x :+      y
-    sinh (x:+y)    =  cos y * sinh x :+ sin  y * cosh x
-    cosh (x:+y@0)  =          cosh x :+     y
-    cosh (x:+y)    =  cos y * cosh x :+ sin y * sinh x
     tanh (x:+y)    | abs(x) > cutover = copySign 1 x :+ copySign 0 y
                    | isInfinite t = p/s :+ 1/t
                    | otherwise = (b*p*s :+ t) /: (1+b*s*s)
@@ -237,7 +249,6 @@ instance  (RealFloat a) => Floating (Complex a) where
     acos z         =  x :+ y
                       where x = 2 * atan(realPart(sqrt(-z+:1))/realPart(sqrt(z+:1)))
                             y = F.asinh (imagPart(conjugate(sqrt(z+:1))*sqrt(-z+:1)))
-
     atan z         =  -iTimes(atanh(iTimes z))
 
     asinh z        =  -iTimes(asin(iTimes z))
@@ -245,17 +256,19 @@ instance  (RealFloat a) => Floating (Complex a) where
     acosh z       = x :+ y
                     where x = F.asinh(realPart(conjugate(sqrt(z-:1)) * sqrt(z+:1)))
                           y = 2 * atan (imagPart(sqrt(z-:1)) / realPart(sqrt(z+:1)))
-
     atanh w@(u:+_) = conjugate(atanh'(conjugate w *: b)) *: b
       where
       b = F.copySign 1 u
       atanh' (1:+y@0) = 1/0 :+ y
-      atanh' z@(x:+y) | x > th || abs y > th = realPart(1/z) :+ copySign (pi/2) y
-                      | x == 1               = log(sqrt(sqrt(4+y*y))/sqrt(abs y + rh)) :+ copySign (pi/2 + atan((abs y + rh)/2)) y / 2
-                      | otherwise            = log1p(4*x/(sq(1-x)+sq(abs y + rh)))/4 :+ phase(((1-x)*(1+x) - sq(abs y + rh)) :+ 2*y)/2
+      atanh' z@(x:+y) | x > th || abs y > th =  realPart(1/z)
+                                             :+ copySign (pi/2) y
+                      | x == 1               =  log(sqrt(sqrt(4+y*y))/sqrt(abs y + rh))
+                                             :+ copySign (pi/2 + atan((abs y + rh)/2)) y / 2
+                      | otherwise            =  log1p(4*x/(sqr(1-x)+sqr(abs y + rh)))/4
+                                             :+ phase(((1-x)*(1+x) - sqr(abs y + rh)) :+ 2*y)/2
       th = sqrt maxNonInfiniteFloat / 4
       rh = 1 / th
-      sq z = z * z
+      sqr z = z * z
 
     log1p x@(a :+ b)
       | abs a < 0.5 && abs b < 0.5
@@ -287,14 +300,13 @@ Kahan also provides procedures (section 9) to implement these the elementary fun
 in a computationally accurate way and with correct branch cuts.
 Some of the functions here are based on these.
 
-Not all functions are based on Kahan's procedures, since:
-1. Some seem to work correctly already; and
-2. Some of his procedures access the floating point exception flags,
-   which are not readily avaiable in Haskell.
--}
+Not all functions are based on Kahan's procedures, since
+some seem to work correctly already.
 
-{- complexSqrt
-   Per https://en.wikipedia.org/wiki/Square_root#Algebraic_formula
+
+Note [sqrt implementation]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  Per https://en.wikipedia.org/wiki/Square_root#Algebraic_formula
 
   sqrt(x:+y) = u :+ copySign v y where 
 
@@ -339,24 +351,6 @@ Not all functions are based on Kahan's procedures, since:
               = sqrt q * 2^j
               = sqrt q * 2^((k-1) `div` 2)
 -}
-
--- note complexSqrt((-0):+(+/-0)) gives 0:+(+/-0),
--- unlike sqrt(-0) which has slighly odd IEEE 754 requirement to be (-0).
-complexSqrt :: RealFloat a => Complex a -> Complex a
-complexSqrt (0:+y@0)                 =      0 :+          y
-complexSqrt (x:+y  ) | isInfinite y  =  abs y :+          y
-                     | x >= 0        =      r :+          s
-                     | otherwise     =  abs s :+ copySign r y
-  where
-    r | isInfinite x      = 1/0
-      | floatRadix x /= 2 = sqrt(scaleFloat k q / 2)  --unlikely. We'll still get overflow for sqrt(huge :+ huge), but we can't used the even/odd logic below
-      | even k            = scaleFloat (k `div` 2 - 1) (sqrt (q+q))
-      | otherwise         = scaleFloat ((k-1) `div` 2) (sqrt q)
-      where
-        q = sqrt(sqr(scaleFloat (-k) x) + sqr(scaleFloat (-k) y)) + scaleFloat (-k) (abs x)
-        sqr w = w * w
-        k = exponent (max (abs x) (abs y))  --cf magnitude
-    s = y/r/2
 
 -- | @since 4.8.0.0
 instance Storable a => Storable (Complex a) where
