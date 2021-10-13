@@ -129,11 +129,9 @@ polar z          =  (magnitude z, phase z)
 -- | The nonnegative magnitude of a complex number.
 {-# SPECIALISE magnitude :: Complex Double -> Double #-}
 magnitude :: (RealFloat a) => Complex a -> a
-magnitude (x:+0) =  abs x --else magnitude (tiny :+ 0) fails: k is set to 0, and sqr tiny = 0.
-magnitude (0:+y) =  abs y
 magnitude (x:+y) =  scaleFloat k
                      (sqrt (sqr (scaleFloat mk x) + sqr (scaleFloat mk y)))
-                    where k  = max (exponent x) (exponent y)
+                    where k = exponent (max (abs x) (abs y))  --ensure handles x or y == 0, so magnitude (tiny:+0) works.
                           mk = - k
                           sqr z = z * z
 
@@ -212,13 +210,7 @@ instance  (RealFloat a) => Floating (Complex a) where
         inf = 1/0
         nan = 0/0
 
-    -- Mirror sqrt(-0) == -0.0. Ensure sqrt(0:+(-0)) is 0:+(-0), etc.
-    sqrt z@(0:+0)  =  z
-    sqrt z@(x:+y)  =  u :+ (if neg y then -v else v)
-                      where (u,v) = if neg x then (v',u') else (u',v')
-                            v'    = abs y / (u'*2)
-                            u'    = sqrt ((magnitude z + abs x) / 2)
-                            neg r = isNegativeZero r || r < 0
+    sqrt = complexSqrt
 
     --sin (x  :+y  ) =  sin x * cosh y :+ cos x * sinh y  --fails for sin (0:+huge)
     sin z          = -iTimes (exp (iTimes z) - exp(-iTimes z)) /: 2
@@ -302,6 +294,71 @@ Not all functions are based on Kahan's procedures, since:
 2. Some of his procedures access the floating point exception flags,
    which are not readily avaiable in Haskell.
 -}
+
+{- complexSqrt
+   Per https://en.wikipedia.org/wiki/Square_root#Algebraic_formula
+
+  sqrt(x:+y) = u :+ copySign v y where 
+
+            [ sqrt(x^2+y^2) + x]
+    u = sqrt[ -----------------]
+            [        2         ]
+
+            [ sqrt(x^2+y^2) - x]
+    v = sqrt[ -----------------]
+            [        2         ]
+
+    Notes:
+
+    1. u * v = abs y/2
+
+                  [ sqrt(x^2+y^2) + abs x]
+    2. if r = sqrt[ ---------------------]
+                  [           2          ]
+
+       then r == u, when x >= 0
+            r == v, when x <= 0
+
+    3. We can scale to avoid some under/over flow.
+
+       let q = [sqrt(x^2+y^2) + abs x]*b^(-k), where b=floatRadix, for some suitable scaling k
+       then r = sqrt(q*b^k/2)
+
+       if b == 2, we can get avoid more under/over flow by also doing:
+
+       if k is even, let k = 2*j
+            r = sqrt(q*2^(2*j)/2)
+              = sqrt(q/2)  * sqrt(2^(2*j))
+              = sqrt(2q/4) * sqrt((2^j)^2)
+              = sqrt(2q)/2 * 2^j
+              = sqrt(2q)   * 2^(j-1)
+              = sqrt(2q)   * 2^(k `div` 2 - 1)
+
+       if k is odd, let k = 2*j + 1
+            r = sqrt(q*2^(2*j+1)/2)
+              = sqrt(q*2^(2*j))
+              = sqrt q * sqrt((2^j)^2)
+              = sqrt q * 2^j
+              = sqrt q * 2^((k-1) `div` 2)
+-}
+
+-- note complexSqrt((-0):+(+/-0)) gives 0:+(+/-0),
+-- unlike sqrt(-0) which has slighly odd IEEE 754 requirement to be (-0).
+complexSqrt :: RealFloat a => Complex a -> Complex a
+complexSqrt (0:+y@0)                 =      0 :+          y
+complexSqrt (x:+y  ) | isInfinite y  =  abs y :+          y
+                     | x >= 0        =      r :+          s
+                     | otherwise     =  abs s :+ copySign r y
+  where
+    r | isInfinite x      = 1/0
+      | floatRadix x /= 2 = sqrt(scaleFloat k q / 2)  --unlikely. We'll still get overflow for sqrt(huge :+ huge), but we can't used the even/odd logic below
+      | even k            = scaleFloat (k `div` 2 - 1) (sqrt (q+q))
+      | otherwise         = scaleFloat ((k-1) `div` 2) (sqrt q)
+      where
+        q = sqrt(sqr(scaleFloat (-k) x) + sqr(scaleFloat (-k) y)) + scaleFloat (-k) (abs x)
+        sqr w = w * w
+        k = exponent (max (abs x) (abs y))  --cf magnitude
+    s = y/r/2
 
 -- | @since 4.8.0.0
 instance Storable a => Storable (Complex a) where
@@ -465,3 +522,4 @@ infixl 7 *:, /:
 -- In addition, for functions that map (real or imaginary) zero to (real or imaginary) zero,
 -- @0.0@ will map to @0.0@ and @-0.0@ will map to @-0.0@ (or, vice-versa, such as for 'negate').
 -- Hence @sqrt(4:+0.0)@ gives @2:+0.@ and @sqrt (4:+(-0.0))@ gives @2:+(-0.0)@.
+
