@@ -42,8 +42,7 @@ hasFltVal _   x (E y) | isNaN y          = isNaN x
                       | otherwise        = x == y
 hasFltVal bps x (A' y) | isNaN y          = isNaN x
                        | isNaN x          = False
-                       | isNegativeZero y = isNegativeZero x
-                       | y == 0           = x == y
+                       | y == 0           = x == y && isNegativeZero x == isNegativeZero y
                        | isInfinite y     = x == y
                        | otherwise        = approx bps x y
 hasFltVal bps x (A y) | isNaN y          = isNaN x
