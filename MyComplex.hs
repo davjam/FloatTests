@@ -200,9 +200,6 @@ instance  (RealFloat a) => Floating (Complex a) where
     {-# SPECIALISE instance Floating (Complex Double) #-}
     pi             =  pi :+ 0
 
-    exp (x:+y@0)   | isInfinite x = exp x :+ (x*y)  --assumes 0 is not a result of underflow.
-                                                    --else should probably return Infinity :+ NaN
-                   | otherwise    = exp x :+ y
     exp (x:+y)     =  expx * cos y :+ expx * sin y
                       where expx = exp x
     log z          =  log (magnitude z) :+ phase z  --see note on phase
@@ -243,13 +240,9 @@ instance  (RealFloat a) => Floating (Complex a) where
         s = y/r/2
 
     --all of these have the same 0 assumption as exp
-    sin  (x@0:+y  )  =      x          :+            sinh y
     sin  (x  :+y  )  =  sin x * cosh y :+    cos x * sinh y
-    cos  (x@0:+y  )  =          cosh y :+ (-     x *      y)
     cos  (x  :+y  )  =  cos x * cosh y :+ (- sin x * sinh y)
-    sinh (x  :+y@0)  =          sinh x :+        y
     sinh (x  :+y  )  =  cos y * sinh x :+    sin y * cosh x
-    cosh (x  :+y@0)  =          cosh x :+        y
     cosh (x  :+y  )  =  cos y * cosh x :+    sin y * sinh x
 
     -- See Note [Kahan implementations] for a number of the following functions.

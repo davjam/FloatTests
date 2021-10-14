@@ -102,6 +102,24 @@ branchCutPointQuadrant Atanh (x:+0) | x < (-1) = Just QII
                                     | x > 1    = Just QIV
 branchCutPointQuadrant _     _                 = Nothing
 
+--These functions do some variant on sin x * exp y.
+--when x == 0 and y > log mx, this becomes 0 + Infinity = NaN
+--Hence these won't match complex vs real or conjugate tests.
+
+data Part = Real | Imag
+  deriving (Eq, Show)
+
+outOfBounds :: RealFloat a => Function -> Complex a -> Maybe Part
+outOfBounds Exp  (x:+0) |     x > logmx = Just Imag
+outOfBounds Sin  (0:+y) | abs y > logmx = Just Real
+outOfBounds Cos  (0:+y) | abs y > logmx = Just Imag
+outOfBounds Sinh (x:+0) | abs x > logmx = Just Imag
+outOfBounds Cosh (x:+0) | abs x > logmx = Just Imag
+outOfBounds _    _                      = Nothing
+
+logmx :: RealFloat a => a
+logmx = log mx
+
 isNeg :: RealFloat a => a -> Bool
 isNeg x | isNegativeZero x = True
         | x < 0            = True
@@ -155,10 +173,6 @@ bugFixTests = concat
   ,let z = 0:+0        in testC False "#8539 #1 (**2)"                (show z) (z**2   ) (E 0)     (E 0) --MORE NEEDED FOR 8539? (Though I've not changed **)
   ,let z = (-1):+0     in testC False "#4228 #1 atanh"                (show z) (atanh z) (E (-1/0))(E 0)
   ,let z = ( 1):+0     in testC False "#4228 #2 atanh"                (show z) (atanh z) (E ( 1/0))(E 0)
-  ,let z = mx:+0       in testC False "exp fixes #1 exp"              (show z) (exp z)   (E ( 1/0))(E 0)
-  ,let z = mx:+(-0)    in testC False "exp fixes #2 exp"              (show z) (exp z)   (E ( 1/0))(E (-0))
-  ,let z = (1/0):+(0)  in testC False "exp fixes #3 exp"              (show z) (exp z)   (E ( 1/0))(E (0/0))
-  ,let z = (1/0):+(-0) in testC False "exp fixes #4 exp"              (show z) (exp z)   (E ( 1/0))(E (-0/0))
   ,let z = mn:+0       in [Test       "magnitude"                     (show z) (magnitude z)  (E mn)]
   ,let z = 0:+mn       in [Test       "magnitude"                     (show z) (magnitude z)  (E mn)]
   ]
@@ -177,7 +191,7 @@ realCpxMatchTests = concat
   --check imag is zero, but don't care what sign
   --since it's difficult to predict e.g. cos (3:+0) has -0.0, cos (4:+0) has 0.0.
   --(Conjugte check with check that cos (3:+0) is conj of cos (3:+(-0)), etc).
-  [ testC False (fnName fn) (show z) fz (A' fx) Z
+  [ testC False (fnName fn) (show z) fz (A' fx) oob
   | fn <- allFunctions
   , x <- xs
   , let fx = fnR fn x
@@ -187,6 +201,8 @@ realCpxMatchTests = concat
   --The only exception in log (-0) :+ (+/-0), which has a different result in the complex case.
   , branchCutPointQuadrant fn z == Nothing
   , let fz = fnF fn z
+        oob | outOfBounds fn z == Just Imag = E (0/0)
+            | otherwise                     = Z
   ]
 
 --For non-IEEE values, don't test points on branch cuts, since:
@@ -206,11 +222,13 @@ conjTests = concat
 
 nonNaNTests :: forall a. (RealFloat a, Show a) => [Test a]
 nonNaNTests = concat
-  [ testC False (fnName fn) (show z) (fnF fn z) NNaN NNaN
+  [ testC False (fnName fn) (show z) (fnF fn z) (oob Real) (oob Imag)
   | fn <- allFunctions
   , x <- extremes
   , y <- extremes
   , let z = x :+ y
+        oob p | outOfBounds fn z == Just p = E (0/0)
+              | otherwise                  = NNaN
   ]
   where extremes = [-mx, -mn, -0, 0, mn, mx]
 
