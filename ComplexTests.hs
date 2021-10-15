@@ -9,6 +9,7 @@ import Double0
 import qualified Data.Complex as C
 import MyComplex 
 import qualified MyFloat as F
+import Data.Char
 
 {- TO ADD:
 inverse function tests, inc phase is inverse of cis, for all +/- 0, +/- pi combinations.
@@ -44,9 +45,10 @@ main = do
   putFails "nonNaN Float"     (nonNaNTests @Float     )
 
   putFails "Conjugate D0"     (conjTests @D0    )
-  putFails "Conjugate D0"     (conjTests @D0    )
   putFails "Conjugate Double" (conjTests @Double)
   putFails "Conjugate Float"  (conjTests @Float )
+
+  putFails "inverseTests" (inverseTests @Double)
 
   putFails "gnumericTests D0"     (gnumericTests @D0)
   putFails "gnumericTests Double" (gnumericTests @Double)
@@ -154,6 +156,25 @@ conjTests = concat
   , let (u:+v) = conjugate $ f z
   ]
 
+inverseTests :: forall a. (RealFloat a, Show a) => [Test a]
+inverseTests = concat $ 
+  [ testC False (fnName invFn ++ " . " ++ fnName fn) (show z) (fnF invFn fnFz) (A $ realPart z) (A $ imagPart z)
+  | (fn, invFn) <- [(Sq,  Sqrt)
+                   ,(Exp, Log)
+                   ,(Sin, Asin)
+                   ,(Cos, Acos)
+                   ,(Tan, Atan)
+                   ,(Sinh, Asinh)
+                   ,(Cosh, Acosh)
+                   ,(Tanh, Atanh)
+                    ]
+  , x <- xs, y <- xs, let z = x:+y
+  , isInRange invFn z
+  , let fnFz = fnF fn z
+  , isGood (realPart fnFz) && isGood (imagPart fnFz)
+  , not (isBranchPoint invFn fnFz)  --exp exp of many things maps to 0:+0, log 0:+0 only maps back to one of them.
+  ]
+
 gnumericTests :: (RealFloat a, Show a) => [Test a]
 gnumericTests = concatMap testFn allFunctions where
   testFn fn = concat $ zipWith testVal zs (fnYs fn) where
@@ -181,32 +202,19 @@ regressionTests = concat $
 --The functions to test
 ------------------------------------
 
-data Function = Sqrt | Exp | Log
+data Function = Sq | Sqrt | Exp | Log
               | Sin | Asin | Cos | Acos | Tan | Atan
               | Sinh | Asinh | Cosh | Acosh | Tanh | Atanh
-  deriving (Eq, Show, Enum, Bounded)
+  deriving (Eq, Enum, Bounded, Show)
+
+fnName :: Function -> String
+fnName = map toLower . show
 
 allFunctions :: [Function]
 allFunctions = [minBound..maxBound]
 
-fnName :: Function -> String
-fnName Sqrt  = "sqrt"
-fnName Exp   = "exp"
-fnName Log   = "log"
-fnName Sin   = "sin"
-fnName Cos   = "cos"  
-fnName Tan   = "tan"  
-fnName Asin  = "asin" 
-fnName Acos  = "acos" 
-fnName Atan  = "atan" 
-fnName Sinh  = "sinh" 
-fnName Cosh  = "cosh" 
-fnName Tanh  = "tanh" 
-fnName Asinh = "asinh"
-fnName Acosh = "acosh"
-fnName Atanh = "atanh"
-
 fnF :: RealFloat a => Function -> Complex a -> Complex a
+fnF Sq    = \z->z*z
 fnF Sqrt  = sqrt
 fnF Exp   = exp
 fnF Log   = log
@@ -224,6 +232,7 @@ fnF Acosh = acosh
 fnF Atanh = atanh
 
 fnC :: RealFloat a => Function -> C.Complex a -> C.Complex a
+fnC Sq    = \z->z*z
 fnC Sqrt  = sqrt
 fnC Exp   = exp
 fnC Log   = log
@@ -242,6 +251,7 @@ fnC Atanh = atanh
 
 --see https://stackoverflow.com/questions/69450017/mapping-over-rankntypes-functions for explanation of this apparent dup
 fnR :: RealFloat a => Function -> a -> a  
+fnR Sq    = \z->z*z
 fnR Sqrt  = sqrt
 fnR Exp   = exp
 fnR Log   = log
@@ -277,6 +287,28 @@ branchCutPointQuadrant Acosh (x:+0) | x < 0    = Just QII
 branchCutPointQuadrant Atanh (x:+0) | x < (-1) = Just QII
                                     | x > 1    = Just QIV
 branchCutPointQuadrant _     _                 = Nothing
+
+isInRange :: RealFloat a => Function -> Complex a -> Bool
+isInRange Sqrt  (x:+y) | isNegativeZero x = False
+                       | otherwise = x >= 0
+isInRange Log   (x:+y) = abs y <= pi
+isInRange Asin  (x:+y) = abs x <= pi / 2
+isInRange Acos  (x:+y) | isNegativeZero x = False
+                       | otherwise = 0 <= x && x <= pi
+isInRange Atan  (x:+y) = abs x <= pi / 2
+isInRange Asinh (x:+y) = abs y <= pi / 2
+isInRange Acosh (x:+y) | isNegativeZero x = False
+                       | otherwise = x >= 0 && abs y <= pi
+isInRange Atanh (x:+y) = abs y <= pi / 2
+isInRange _ _ = True
+
+isBranchPoint :: RealFloat a => Function -> Complex a -> Bool
+isBranchPoint Log (0:+0) = True --per CL "the domain excludes the origin"
+isBranchPoint Atan (0:+1) = True
+isBranchPoint Atan (0:+(-1)) = True
+isBranchPoint Atanh (1:+0) = True
+isBranchPoint Atanh ((-1):+0) = True
+isBranchPoint _ _ = False
 
 --These functions do some variant on sin x * exp y.
 --when x == 0 and y > log mx, this becomes 0 + Infinity = NaN
@@ -447,6 +479,7 @@ pushToQuadrant = pushToQuadrant' where
 data External a = C a | Err
 
 fnYs :: RealFloat a => Function -> [External (Complex a)]
+fnYs Sq    = []
 fnYs Sqrt  = sqrts 
 fnYs Exp   = exps  
 fnYs Log   = logs  
