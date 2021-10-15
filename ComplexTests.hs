@@ -48,7 +48,9 @@ main = do
   putFails "Conjugate Double" (conjTests @Double)
   putFails "Conjugate Float"  (conjTests @Float )
 
-  putFails "inverseTests" (inverseTests @Double)
+  putFails "inverseTests D0"     (inverseTests @D0     A)
+  putFails "inverseTests Double" (inverseTests @Double A)
+  putFails "inverseTests Float"  (inverseTests @Float  A2)  --Float just isn't as accurate
 
   putFails "gnumericTests D0"     (gnumericTests @D0)
   putFails "gnumericTests Double" (gnumericTests @Double)
@@ -156,9 +158,9 @@ conjTests = concat
   , let (u:+v) = conjugate $ f z
   ]
 
-inverseTests :: forall a. (RealFloat a, Show a) => [Test a]
-inverseTests = concat $ 
-  [ testC False (fnName invFn ++ " . " ++ fnName fn) (show z) (fnF invFn fnFz) (A $ realPart z) (A $ imagPart z)
+inverseTests :: forall a. (RealFloat a, Show a) => (a -> Expected a) -> [Test a]
+inverseTests match = concat $ 
+  [ testC False (fnName invFn ++ " . " ++ fnName fn) (show z) (fnF invFn fnFz) (match $ realPart z) (match $ imagPart z)
   | (fn, invFn) <- [(Sq,  Sqrt)
                    ,(Exp, Log)
                    ,(Sin, Asin)
@@ -168,12 +170,21 @@ inverseTests = concat $
                    ,(Cosh, Acosh)
                    ,(Tanh, Atanh)
                     ]
-  , x <- xs, y <- xs, let z = x:+y
+  , x <- map fixPi xs, y <- map fixPi xs, let z = x:+y
   , isInRange invFn z
   , let fnFz = fnF fn z
   , isGood (realPart fnFz) && isGood (imagPart fnFz)
   , not (isBranchPoint invFn fnFz)  --exp exp of many things maps to 0:+0, log 0:+0 only maps back to one of them.
   ]
+  where --With Float, pi (the Haskell variable) > pi (the mathematical value).
+        --This causes e.g. exp (1:+pi) to go the wrong side of the branch cut, so log maps back to exp (1 :+ (-pi))
+        --So here, we just round pi (and pi/2) so it's < math pi.
+        --(For double, pi < math pi already).
+        fixPi   3.1415927  =  3.1415926
+        fixPi (-3.1415927) = -3.1415926
+        fixPi ( 1.5707964) =  1.5707963
+        fixPi (-1.5707964) = -1.5707963
+        fixPi x            = x
 
 gnumericTests :: (RealFloat a, Show a) => [Test a]
 gnumericTests = concatMap testFn allFunctions where
@@ -289,18 +300,26 @@ branchCutPointQuadrant Atanh (x:+0) | x < (-1) = Just QII
 branchCutPointQuadrant _     _                 = Nothing
 
 isInRange :: RealFloat a => Function -> Complex a -> Bool
+isInRange Sqrt  (0:+y) | notIEEE y && y < 0 = False
 isInRange Sqrt  (x:+y) | isNegativeZero x = False
                        | otherwise = x >= 0
 isInRange Log   (x:+y) = abs y <= pi
 isInRange Asin  (x:+y) = abs x <= pi / 2
+isInRange Acos  (x:+y) | notIEEE x && y < 0 = False
+                       | notIEEE x && x == pi && y > 0 = False
 isInRange Acos  (x:+y) | isNegativeZero x = False
                        | otherwise = 0 <= x && x <= pi
 isInRange Atan  (x:+y) = abs x <= pi / 2
 isInRange Asinh (x:+y) = abs y <= pi / 2
+isInRange Acosh (x:+y) | notIEEE x && abs x <= mn && y < 0 = False  --strictly only x==0 excluded, but we need this so rounding doesn't create issue for D0
+isInRange Acosh (x:+y) | notIEEE x && x == -pi = False
 isInRange Acosh (x:+y) | isNegativeZero x = False
                        | otherwise = x >= 0 && abs y <= pi
 isInRange Atanh (x:+y) = abs y <= pi / 2
 isInRange _ _ = True
+
+notIEEE :: RealFloat a => a -> Bool
+notIEEE = not . isIEEE
 
 isBranchPoint :: RealFloat a => Function -> Complex a -> Bool
 isBranchPoint Log (0:+0) = True --per CL "the domain excludes the origin"
