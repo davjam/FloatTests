@@ -1,5 +1,6 @@
 {-# OPTIONS -Wall -Wpartial-fields #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE CApiFFI #-}
 
@@ -253,3 +254,17 @@ mx = encodeFloat m n where
     m = b ^ e - 1
     n = e' - e
     a = undefined :: a
+
+
+_cSquare :: forall a. IEEE a => Complex a -> Complex a
+_cSquare (w:+n) | isNaN x = if | isInfinite y -> copySign 0 w :+ y
+                               | isInfinite n -> (-1/0) :+ y
+                               | isInfinite w -> 1/0 :+ y
+                               | otherwise    -> x :+ y
+                | isNaN y && isInfinite x = x :+ copySign 0 y
+                | otherwise = x:+y
+  where
+    x = (w-n)*(w+n)
+    y = wn+wn
+    wn = w*n
+    

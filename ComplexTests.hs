@@ -1,4 +1,5 @@
 {-# OPTIONS -Wall -Wpartial-fields -Wno-unused-matches #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE ExplicitForAll, TypeApplications, ScopedTypeVariables #-}
 
 
@@ -56,7 +57,7 @@ main = do
   putFails "gnumericTests Double" (gnumericTests @Double)
   putFails "gnumericTests Float"  (gnumericTests @Float)
 
-  putFails "regressionTests" (regressionTests @Double)
+  putFails "regressionTests Double" (regressionTests @Double)
 
 bugFixTests :: (RealFloat a, Show a) => [Test a]
 bugFixTests = concat
@@ -120,6 +121,7 @@ realCpxMatchTests = concat
   [ testC False (fnName fn) (show z) fz (A' fx) oob
   | fn <- allFunctions
   , x <- xs
+  , not (exclude fn x)
   , let fx = fnR fn x
   , not $ isNaN fx
   , z  <- [x :+ 0, x :+ (-0)]
@@ -130,6 +132,10 @@ realCpxMatchTests = concat
         oob | outOfBounds fn z == Just Imag = E nan
             | otherwise                     = Z
   ]
+  where
+  exclude Sq   x | isNegativeZero x = True
+  exclude Sqrt x | isNegativeZero x = True
+  exclude _    _                    = False
 
 nonNaNTests :: forall a. (RealFloat a, Show a) => [Test a]
 nonNaNTests = concat
@@ -201,6 +207,7 @@ regressionTests :: (RealFloat a, HasVal a, Show a) => [Test a]
 regressionTests = concat $
   [ testC False (fnName fn) (show z) (fnF fn z) (A $ C.realPart fnCz) (A $ C.imagPart fnCz)
   | fn <- allFunctions
+  , fn /= Sq
   , x <- xs
   , y <- xs
   , let z = x :+ y
@@ -225,7 +232,7 @@ allFunctions :: [Function]
 allFunctions = [minBound..maxBound]
 
 fnF :: RealFloat a => Function -> Complex a -> Complex a
-fnF Sq    = \z->z*z
+fnF Sq    = square
 fnF Sqrt  = sqrt
 fnF Exp   = exp
 fnF Log   = log
@@ -241,6 +248,19 @@ fnF Tanh  = tanh
 fnF Asinh = asinh
 fnF Acosh = acosh
 fnF Atanh = atanh
+
+--per Kahan (stops error in NaN test).
+square :: forall a. RealFloat a => Complex a -> Complex a
+square (w:+n) | isNaN x = if | isInfinite y -> F.copySign 0 w :+ y
+                               | isInfinite n -> (-1/0) :+ y
+                               | isInfinite w -> 1/0 :+ y
+                               | otherwise    -> x :+ y
+                | isNaN y && isInfinite x = x :+ F.copySign 0 y
+                | otherwise = x:+y
+  where
+    x = (w-n)*(w+n)
+    y = wn+wn
+    wn = w*n
 
 fnC :: RealFloat a => Function -> C.Complex a -> C.Complex a
 fnC Sq    = \z->z*z
