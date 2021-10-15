@@ -6,10 +6,12 @@ where
 import Double0
 
 import Data.Foldable
+import Control.Monad
 
 data Expected a = E a    --exactly
                 | A a    --approximately (but to many sfs)
                 | A' a   --like A, but if 0, -0, Inf, -Inf, NaN checked exactly (including sign)
+                | A2 a   --like A, but to less precision.
                 | R      --any real (not Inf, not NaN)
                 | NNaN   --not NaN
                 | Z      --exactly zero, but either + or -.
@@ -19,6 +21,7 @@ data Expected a = E a    --exactly
 
 class HasVal a where
   hasVal :: a -> Expected a -> Bool
+  infix 4 `hasVal`
 
 instance HasVal Double where
   x `hasVal` y = hasFltVal 36 x y
@@ -49,6 +52,10 @@ hasFltVal bps x (A y) | isNaN y          = isNaN x
                       | isNaN x          = False
                       | isInfinite y     = abs x > 2^(2*bps)
                       | otherwise        = approx bps x y
+hasFltVal bps x (A2 y) | isNaN y          = isNaN x
+                       | isNaN x          = False
+                       | isInfinite y     = abs x > 2^(2*bps)
+                       | otherwise        = approx (bps `div` 2) x y
 hasFltVal bps x (SI s) = s < x && x - s < 1/2^bps
 hasFltVal bps x (SD s) = s > x && s - x < 1/2^bps
 hasFltVal _   0 Z      = True
@@ -71,9 +78,10 @@ putFails :: (Show a, HasVal a) => String -> [Test a] -> IO ()
 putFails label tests | null fails   = putStrLn $ label ++ " passed."
                      | otherwise = do
   putStrLn $ label ++ " FAILURES:"
-  traverse_ putFail fails
+  traverse_ putFail $ take 10 fails
+  when (length fails > 10) $ putStrLn $ show (length fails - 10) ++ " more..."
   putStrLn ""
   where
     fails = filter (\(Test _ _ value expected) -> not (value `hasVal` expected)) tests
-    putFail (Test n v value expected) = putStrLn $ n++" "++v++" sb "++show expected++" is "++show value
+    putFail (Test n v value expected) = putStrLn $ n++" $ "++v++" sb "++show expected++" is "++show value
 

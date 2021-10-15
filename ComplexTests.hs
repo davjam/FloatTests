@@ -1,4 +1,4 @@
---{-# OPTIONS -Wall -Wpartial-fields #-}
+{-# OPTIONS -Wall -Wpartial-fields -Wno-unused-matches #-}
 {-# LANGUAGE ExplicitForAll, TypeApplications, ScopedTypeVariables #-}
 
 
@@ -6,7 +6,7 @@ import HasVal
 import Double0
 
 --Switch between these to test old / new results:
---import Data.Complex
+import qualified Data.Complex as C
 import MyComplex 
 import qualified MyFloat as F
 
@@ -16,6 +16,7 @@ atanh with 1, -1, tiny values (less that rh).
 (esp atanh $ (1) :+ (1e-300) == 177.09 :+ 0.785. WA says 345.7 :+ (-0.785)
 Regression tests vs old Data.Complex.
 Tests for log1p etc
+tests for phase, magnitude, etc.
 -}
 
 ------------------------------------
@@ -50,6 +51,8 @@ main = do
   putFails "gnumericTests D0"     (gnumericTests @D0)
   putFails "gnumericTests Double" (gnumericTests @Double)
   putFails "gnumericTests Float"  (gnumericTests @Float)
+
+  putFails "regressionTests" (regressionTests @Double)
 
 bugFixTests :: (RealFloat a, Show a) => [Test a]
 bugFixTests = concat
@@ -161,6 +164,19 @@ gnumericTests = concatMap testFn allFunctions where
     testVal _ Err        = []
   zs = [x:+y|y<-gnumericXs,x<-gnumericXs]
 
+
+regressionTests :: (RealFloat a, HasVal a, Show a) => [Test a]
+regressionTests = concat $
+  [ testC False (fnName fn) (show z) (fnF fn z) (A $ C.realPart fnCz) (A $ C.imagPart fnCz)
+  | fn <- allFunctions
+  , x <- xs
+  , y <- xs
+  , let z = x :+ y
+  , not (expectedRegression fn z)
+  , let fnCz = fnC fn (x C.:+ y)
+  ]
+
+
 ------------------------------------
 --The functions to test
 ------------------------------------
@@ -206,6 +222,23 @@ fnF Tanh  = tanh
 fnF Asinh = asinh
 fnF Acosh = acosh
 fnF Atanh = atanh
+
+fnC :: RealFloat a => Function -> C.Complex a -> C.Complex a
+fnC Sqrt  = sqrt
+fnC Exp   = exp
+fnC Log   = log
+fnC Sin   = sin
+fnC Cos   = cos  
+fnC Tan   = tan  
+fnC Asin  = asin 
+fnC Acos  = acos 
+fnC Atan  = atan 
+fnC Sinh  = sinh 
+fnC Cosh  = cosh 
+fnC Tanh  = tanh 
+fnC Asinh = asinh
+fnC Acosh = acosh
+fnC Atanh = atanh
 
 --see https://stackoverflow.com/questions/69450017/mapping-over-rankntypes-functions for explanation of this apparent dup
 fnR :: RealFloat a => Function -> a -> a  
@@ -259,6 +292,77 @@ outOfBounds Cos  (0:+y) | abs y > logmx = Just Imag
 outOfBounds Sinh (x:+0) | abs x > logmx = Just Imag
 outOfBounds Cosh (x:+0) | abs x > logmx = Just Imag
 outOfBounds _    _                      = Nothing
+
+expectedRegression :: (HasVal a, RealFloat a) => Function -> Complex a -> Bool
+-- deal with any infinities first.
+-- then subsequent logic (e.g. abs x > blah) isn't accidentally failing to check infinities
+expectedRegression _      (x:+y)  | isInfinite x                    = False
+                                  | isInfinite y                    = False
+expectedRegression fn   z         | branchCutPointQuadrant fn z
+                                                /= Nothing          = True  --XXXX we should check - the originals might have gone the right way.
+expectedRegression Sqrt z@(x:+y)  | oldSqrtOverflow z = True
+                                  | x == 0 && abs y < sqrt mn       = True  --underflow
+                                  | y == 0 && abs x < sqrt mn       = True  --underflow
+expectedRegression Log  z@(x:+y)  | isNegativeZero x && y == 0      = True  --branch cut at -0
+                                  | x == 0 && abs y < sqrt mn       = True  --underflow in magnitude
+                                  | y == 0 && abs x < sqrt mn       = True  --underflow in magnitude
+expectedRegression Asin z@(x:+y)  | z*z+1 == z*z                    = True  --loss of precision -> NaN
+                                  | z*z+(0:+1) == z*z               = True
+                                  | isGood x && isGood y &&
+                                    (isBad (realPart $ z*z)
+                                     || isBad (imagPart $ z*z))     = True
+                                  | y /= 0 && abs y <= sqrt mn      = True  --underflow in sqrt
+expectedRegression Acos z@(x:+y)  | oldSqrtOverflow z               = True
+                                  | z*z+1 == z*z                    = True  --loss of precision -> NaN
+                                  | z*z+(0:+1) == z*z               = True
+                                  | expectedRegression Sqrt (1-z*z) = True
+expectedRegression Tan z@(x:+y)   | abs y >= log mx                 = True  --sinh y, cosh y overflow
+                                  | isNegativeZero y                = True  --loss of -0
+                                  | x ==  pi / 2                    = True  --inaccuracy
+                                  | x == -pi / 2                    = True
+                                  | not (tan x `hasVal` 
+                                            (A $ sin x / cos x))    = True  --starts to fail after abs x > 1e10
+expectedRegression Atan z@(0:+1)                                    = True  --mismatches Kahan's principle expressions
+expectedRegression Atan z@(0:+(-1))                                 = True
+expectedRegression Atan z@(x:+y)  | abs x >= sqrt mx                = True  --UNCLEAR
+                                  | abs y >= sqrt mx                = True                       
+                                  | expectedRegression Sqrt (1+z*z) = True
+expectedRegression Asinh z@(x:+y) | oldSqrtOverflow z               = True
+                                  | z*z+1 == z*z                    = True
+                                  | z*z+(0:+1) == z*z               = True
+                                  | expectedRegression Sqrt (1+z*z) = True
+expectedRegression Acosh z@(x:+y) | isInfinite (realPart $ 2*z)     = True  --overflow
+                                  | isInfinite (imagPart $ 2*z)     = True
+                                  | expectedRegression Sqrt (z+1)   = True
+                                  | expectedRegression Sqrt (z-1)   = True
+expectedRegression Tanh z@(x:+y)   | abs x >= log mx                = True  --sinh x, cosh x overflow
+                                   | y ==  pi / 2                   = True  --inaccuracy
+                                   | y == -pi / 2                   = True
+                                   | not (tan y `hasVal`
+                                              (A $ sin y / cos y))  = True
+expectedRegression Atanh z@(1:+0)                                   = True  --mismatches Kahan's principle expressions
+expectedRegression Atanh z@((-1):+0)                                = True
+
+expectedRegression Atanh z@(x:+y) | abs x >= sqrt mx                = True
+                                  | abs y >= sqrt mx                = True  --UNCLEAR
+                                  | w == 0                          = True  -- undeflow
+                                  | isInfinite (realPart w)         = True
+                                  | isInfinite (imagPart w)         = True
+                                  | expectedRegression Log w        = True
+  where w = (1.0+z) / (1.0-z)
+expectedRegression _ _                                              = False
+
+oldSqrtOverflow :: RealFloat a => Complex a -> Bool
+oldSqrtOverflow z | isInfinite(realPart zz) = True
+                  | isInfinite(imagPart zz) = True
+                  | otherwise               = False
+  where zz = z * z
+
+isGood, isBad :: RealFloat a => a -> Bool
+isBad x | isInfinite x = True
+        | isNaN      x = True
+        | otherwise    = False
+isGood = not . isBad
 
 ------------------------------------
 -- numbers to test with
