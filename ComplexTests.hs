@@ -11,6 +11,7 @@ import qualified Data.Complex as C
 import MyComplex 
 import qualified MyFloat as F
 import Data.Char
+import Data.Maybe
 
 {- TO ADD:
 inverse function tests, inc phase is inverse of cis, for all +/- 0, +/- pi combinations.
@@ -212,9 +213,9 @@ regressionTests = concat $
   , y <- xs
   , let z = x :+ y
   , not (expectedRegression fn z)
-  , let fnCz = fnC fn (x C.:+ y)
+  , let zC = x C.:+ y
+        fnCz = fromMaybe (fnC fn zC) $ override fn zC
   ]
-
 
 ------------------------------------
 --The functions to test
@@ -342,12 +343,12 @@ notIEEE :: RealFloat a => a -> Bool
 notIEEE = not . isIEEE
 
 isBranchPoint :: RealFloat a => Function -> Complex a -> Bool
-isBranchPoint Log (0:+0) = True --per CL "the domain excludes the origin"
-isBranchPoint Atan (0:+1) = True
-isBranchPoint Atan (0:+(-1)) = True
-isBranchPoint Atanh (1:+0) = True
+isBranchPoint Log   (0:+0)    = True --per CL p310 "the domain excludes the origin"
+isBranchPoint Atan  (0:+1)    = True --ditto p312
+isBranchPoint Atan  (0:+(-1)) = True
+isBranchPoint Atanh (1:+0)    = True --ditto p314
 isBranchPoint Atanh ((-1):+0) = True
-isBranchPoint _ _ = False
+isBranchPoint _ _             = False
 
 --These functions do some variant on sin x * exp y.
 --when x == 0 and y > log mx, this becomes 0 + Infinity = NaN
@@ -434,6 +435,32 @@ isBad x | isInfinite x = True
         | isNaN      x = True
         | otherwise    = False
 isGood = not . isBad
+
+override :: RealFloat a => Function -> C.Complex a -> Maybe (C.Complex a)
+--Where the current functions don't fail with Infs/NaNs, but just return innacurate results.
+--All values from WA - except where noted.
+override Asin  ((-1.0) C.:+ (-6.2138610988780994e-21))  = Just $ (-1.57079632671606857156503670)     C.:+ (-7.88280476662849959740264749e-11)
+override Asin  ((-1.0) C.:+   6.2138610988780994e-21 )  = Just $ (-1.57079632671606857156503670)     C.:+ ( 7.88280476662849959740264749e-11)
+override Asin  (( 1.0) C.:+ (-6.2138610988780994e-21))  = Just $ ( 1.57079632671606857156503670)     C.:+ (-7.88280476662849959740264749e-11)
+override Asin  (( 1.0) C.:+   6.2138610988780994e-21 )  = Just $ ( 1.57079632671606857156503670)     C.:+ ( 7.88280476662849959740264749e-11)
+override Acos  ((-1.0) C.:+ (-6.2138610988780994e-21))  = Just $   3.14159265351096519079635839      C.:+   7.88280476662849959740264749e-11
+override Acos  ((-1.0) C.:+ ( 6.2138610988780994e-21))  = Just $   3.14159265351096519079635839      C.:+ (-7.88280476662849959740264749e-11)
+override Acos  (( 1.0) C.:+ ( 6.2138610988780994e-21))  = Just $   7.8828047666284996e-11            C.:+ (-7.8828047666284996e-11)
+override Acos  (( 1.0) C.:+ (-6.2138610988780994e-21))  = Just $   7.8828047666284996e-11            C.:+ ( 7.8828047666284996e-11)
+override Asinh ((-6.2138610988780994e-21) C.:+ (-1.0))  = Just $ (-7.88280476662849959740264749e-11) C.:+ (-1.57079632671606857156503670)
+override Asinh ((-6.2138610988780994e-21) C.:+ ( 1.0))  = Just $ (-7.88280476662849959740264749e-11) C.:+ ( 1.57079632671606857156503670)
+override Asinh (( 6.2138610988780994e-21) C.:+ ( 1.0))  = Just $ ( 7.88280476662849959740264749e-11) C.:+ ( 1.57079632671606857156503670)
+override Asinh (( 6.2138610988780994e-21) C.:+ (-1.0))  = Just $ ( 7.88280476662849959740264749e-11) C.:+ (-1.57079632671606857156503670)
+override Acosh ((-1.0) C.:+ (-6.2138610988780994e-21))  = Just $   7.88280476662849959740264749e-11  C.:+ (-3.14159265351096519079635839)
+override Acosh ((-1.0) C.:+ ( 6.2138610988780994e-21))  = Just $   7.88280476662849959740264749e-11  C.:+ ( 3.14159265351096519079635839)
+override Acosh (( 1.0) C.:+ (-6.2138610988780994e-21))  = Just $   7.8828047666284996e-11            C.:+ (-7.8828047666284996e-11)
+override Acosh (( 1.0) C.:+ ( 6.2138610988780994e-21))  = Just $   7.8828047666284996e-11            C.:+   7.8828047666284996e-11
+override Atanh (2.718281828459045 C.:+ (-5.0e-324))     = Just $   0.3859684164526524                C.:+ (-1.570796326794897)
+override Atanh (2.718281828459045 C.:+ ( 5.0e-324))     = Just $   0.3859684164526524                C.:+ ( 1.570796326794897) --WA is WRONG! It thinks this is on the branch cut.
+                                                                                                                               --It gets e.g. 5.0e-19 right
+override Atanh (3.141592653589793 C.:+ (-5.0e-324))     = Just $   0.3297653149566991                C.:+ (-1.570796326794897)
+override Atanh (3.141592653589793 C.:+ ( 5.0e-324))     = Just $   0.3297653149566991                C.:+ ( 1.570796326794897) --ditto
+override _ z = Nothing
 
 ------------------------------------
 -- numbers to test with

@@ -78,9 +78,9 @@ type Val  = String
 putFails :: (Show a, HasVal a) => String -> [Test a] -> IO ()
 putFails label tests | null fails   = putStrLn $ label ++ " passed."
                      | otherwise = do
-  putStrLn $ label ++ " FAILURES:"
-  traverse_ putFail $ take 10 fails
-  when (length fails > 10) $ putStrLn $ show (length fails - 10) ++ " more..."
+  putStrLn $ label ++ " " ++ (show $ length fails) ++ " FAILURES:"
+  traverse_ putFail $ take 30 fails
+  when (length fails > 30) $ putStrLn "..."
   putStrLn ""
   where
     fails = filter (\(Test _ _ value expected) -> not (value `hasVal` expected)) tests
