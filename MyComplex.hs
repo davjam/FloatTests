@@ -275,15 +275,14 @@ instance  (RealFloat a) => Floating (Complex a) where
     atanh w@(u:+_) = conjugate(atanh'(conjugate w *: b)) *: b
       where
       b = copySign 1 u
-      atanh' (1:+y@0) = 1/0 :+ y
+      atanh' (1:+y@0) = 1/0 :+ y  --although excluded from domain, make it match real fn (Infinity +/-0i)
       atanh' z@(x:+y) | x > th || abs y > th =  realPart(1/z)
                                              :+ copySign (pi/2) y
-                      | x == 1               =  log(sqrt(sqrt(4+y*y))/sqrt(abs y + rh))
-                                             :+ copySign (pi/2 + atan((abs y + rh)/2)) y / 2
-                      | otherwise            =  log1p(4*x/(sqr(1-x)+sqr(abs y + rh)))/4
-                                             :+ phase(((1-x)*(1+x) - sqr(abs y + rh)) :+ 2*y)/2
+                      | x == 1               =  log(sqrt(sqrt(4+y*y))/sqrt(abs y))
+                                             :+ copySign (pi/2 + atan((abs y)/2)) y / 2
+                      | otherwise            =  log1p(4*x/(sqr(1-x)+sqr(abs y)))/4
+                                             :+ phase(((1-x)*(1+x) - sqr(abs y)) :+ 2*y)/2
       th = sqrt maxNonInfiniteFloat / 4
-      rh = 1 / th
       sqr z = z * z
 
     log1p x@(a :+ b)
