@@ -52,13 +52,15 @@ main = do
 
   putFails "inverseTests D0"     (inverseTests @D0     A)
   putFails "inverseTests Double" (inverseTests @Double A)
-  putFails "inverseTests Float"  (inverseTests @Float  A2)  --Float just isn't as accurate
+  putFails "inverseTests Float"  (inverseTests @Float  $ A2 2)  --Float just isn't as accurate
 
   putFails "gnumericTests D0"     (gnumericTests @D0)
   putFails "gnumericTests Double" (gnumericTests @Double)
   putFails "gnumericTests Float"  (gnumericTests @Float)
 
-  putFails "regressionTests Double" (regressionTests @Double)
+  putFails "regressionTests D0"     (regressionTests @D0      A)
+  putFails "regressionTests Double" (regressionTests @Double  A)
+  putFails "regressionTests Float"  (regressionTests @Float   $ A2 3)
 
 bugFixTests :: (RealFloat a, Show a) => [Test a]
 bugFixTests = concat
@@ -204,9 +206,9 @@ gnumericTests = concatMap testFn allFunctions where
   zs = [x:+y|y<-gnumericXs,x<-gnumericXs]
 
 
-regressionTests :: (RealFloat a, HasVal a, Show a) => [Test a]
-regressionTests = concat $
-  [ testC False (fnName fn) (show z) (fnF fn z) (A $ C.realPart fnCz) (A $ C.imagPart fnCz)
+regressionTests :: (RealFloat a, HasVal a, Show a) => (a -> Expected a) -> [Test a]
+regressionTests match = concat $
+  [ testC False (fnName fn) (show z) (fnF fn z) (match $ C.realPart fnCz) (match $ C.imagPart fnCz)
   | fn <- allFunctions
   , fn /= Sq
   , x <- xs
@@ -455,11 +457,19 @@ override Acosh ((-1.0) C.:+ (-6.2138610988780994e-21))  = Just $   7.88280476662
 override Acosh ((-1.0) C.:+ ( 6.2138610988780994e-21))  = Just $   7.88280476662849959740264749e-11  C.:+ ( 3.14159265351096519079635839)
 override Acosh (( 1.0) C.:+ (-6.2138610988780994e-21))  = Just $   7.8828047666284996e-11            C.:+ (-7.8828047666284996e-11)
 override Acosh (( 1.0) C.:+ ( 6.2138610988780994e-21))  = Just $   7.8828047666284996e-11            C.:+   7.8828047666284996e-11
-override Atanh (2.718281828459045 C.:+ (-5.0e-324))     = Just $   0.3859684164526524                C.:+ (-1.570796326794897)
+
 override Atanh (2.718281828459045 C.:+ ( 5.0e-324))     = Just $   0.3859684164526524                C.:+ ( 1.570796326794897) --WA is WRONG! It thinks this is on the branch cut.
                                                                                                                                --It gets e.g. 5.0e-19 right
-override Atanh (3.141592653589793 C.:+ (-5.0e-324))     = Just $   0.3297653149566991                C.:+ (-1.570796326794897)
+override Atanh (2.718281828459045 C.:+ (-5.0e-324))     = Just $   0.3859684164526524                C.:+ (-1.570796326794897)
 override Atanh (3.141592653589793 C.:+ ( 5.0e-324))     = Just $   0.3297653149566991                C.:+ ( 1.570796326794897) --ditto
+override Atanh (3.141592653589793 C.:+ (-5.0e-324))     = Just $   0.3297653149566991                C.:+ (-1.570796326794897)
+
+--these match Float values:
+override Atanh (2.7182817 C.:+   1.0e-45 ) = Just $ 0.38596845 C.:+   1.5707964
+override Atanh (2.7182817 C.:+ (-1.0e-45)) = Just $ 0.38596845 C.:+ (-1.5707964)
+override Atanh (3.1415927 C.:+   1.0e-45 ) = Just $ 0.32976532 C.:+   1.5707964
+override Atanh (3.1415927 C.:+ (-1.0e-45)) = Just $ 0.32976532 C.:+ (-1.5707964)
+
 override _ z = Nothing
 
 ------------------------------------

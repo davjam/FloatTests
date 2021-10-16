@@ -11,7 +11,7 @@ import Control.Monad
 data Expected a = E a    --exactly
                 | A a    --approximately (but to many sfs)
                 | A' a   --like A, but if 0, -0, Inf, -Inf, NaN checked exactly (including sign)
-                | A2 a   --like A, but to less precision.
+                | A2 Int a  --like A, but to less precision.
                 | R      --any real (not Inf, not NaN)
                 | NNaN   --not NaN
                 | Z      --exactly zero, but either + or -.
@@ -53,10 +53,10 @@ hasFltVal bps x (A y) | isNaN y          = isNaN x
                       | abs y > 1e19   = abs x > 1e19 || isInfinite x
                       | isInfinite y     = abs x > 2^(2*bps)  --XXXX check!
                       | otherwise        = approx bps x y
-hasFltVal bps x (A2 y) | isNaN y          = isNaN x
+hasFltVal bps x (A2 n y) | isNaN y          = isNaN x
                        | isNaN x          = False
                        | isInfinite y     = abs x > 2^(2*bps)
-                       | otherwise        = approx (bps `div` 2) x y
+                       | otherwise        = approx (bps `div` n) x y
 hasFltVal bps x (SI s) = s < x && x - s < 1/2^bps
 hasFltVal bps x (SD s) = s > x && s - x < 1/2^bps
 hasFltVal _   0 Z      = True
