@@ -8,8 +8,8 @@
 -- see https://people.freebsd.org/~das/kahan86branch.pdf
 
 module Kahan (
-    cAbs, cArg, IEEE(copySign),
-    
+    cAbs, cArg,
+    cSqrt, cLog,  
     absTests, argTests
   ) where
 
@@ -18,11 +18,11 @@ import Numeric
 --import Debug.Trace
 
 --https://www.cplusplus.com/reference/cmath/copysign/?kw=copysign
-foreign import ccall unsafe "math.h copysignf"       copysign_f       :: Float  -> Float  -> Float      --XXXX IO? CFloat?
-foreign import ccall unsafe "math.h copysign"        copysign_d       :: Double -> Double -> Double
-foreign import ccall unsafe "math.h hypotf"          hypot_f          :: Float  -> Float  -> Float
-foreign import ccall unsafe "math.h hypot"           hypot_d          :: Double -> Double -> Double
-foreign import ccall unsafe "math.h atan2"           atan2_d          :: Double -> Double -> Double      --XXXX no float version. (Should match haskell).
+--foreign import ccall unsafe "math.h copysignf"       copysign_f       :: Float  -> Float  -> Float      --XXXX IO? CFloat?
+--foreign import ccall unsafe "math.h copysign"        copysign_d       :: Double -> Double -> Double
+--foreign import ccall unsafe "math.h hypotf"          hypot_f          :: Float  -> Float  -> Float
+--foreign import ccall unsafe "math.h hypot"           hypot_d          :: Double -> Double -> Double
+--foreign import ccall unsafe "math.h atan2"           atan2_d          :: Double -> Double -> Double      --XXXX no float version. (Should match haskell).
 --foreign import ccall unsafe "math.h asinhf"          asinh_f          :: Float  -> Float
 --foreign import ccall unsafe "math.h asinh"           asinh_d          :: Double -> Double
 
@@ -73,8 +73,8 @@ _cAbsH (x0:+y0) = uncurry cAbs' $ sort2 (abs x0) (abs y0)
     sort2 x y | x < y     = (y,x)
               | otherwise = (x,y)
 
-cAbs :: IEEE a => Complex a -> a                            -- this is what we'll use
-cAbs (x:+y) = hypot x y
+cAbs :: RealFloat a => Complex a -> a
+cAbs z = magnitude z
 
 absTests :: RealFloat a => (Complex a -> a) -> Bool
 absTests f = and [
@@ -100,10 +100,10 @@ absTests f = and [
 Should match phase, but phase fails for 0:+(-0), etc.
 -}
 
-cArg :: IEEE a => Complex a -> a
-cArg (x:+y) = atan2C y x
+cArg :: RealFloat a => Complex a -> a
+cArg z = phase z
 
-_cArgK :: IEEE a => Complex a -> a
+_cArgK :: RealFloat a => Complex a -> a
 _cArgK (x0:+y0) = 
   let x1 = if x0 == 0 && y0 == 0 then copySign 1 x0 else x0
       _z0 = undefined -- z = CBOX???
@@ -128,6 +128,7 @@ argTests f = and [
   f ((-0):+(-0)) == -pi
   ]
 
+{-
 class RealFloat a => IEEE a where
   copySign :: a -> a -> a
   hypot :: a -> a -> a
@@ -145,7 +146,7 @@ instance IEEE Float where
   hypot    = hypot_f   
   atan2C   = undefined
 --  asinhC   = asinh_f
-
+-}
 
 
 {-
@@ -155,10 +156,10 @@ minPositiveFloat = encodeFloat 1 $ fst (floatRange a) - floatDigits a
 -}
 
 
-_cLog :: IEEE a => Complex a -> Complex a
+_cLog :: RealFloat a => Complex a -> Complex a
 _cLog z = cLogS z 0
 
-cLogS :: forall a. IEEE a => Complex a -> a -> Complex a
+cLogS :: forall a. RealFloat a => Complex a -> a -> Complex a
 cLogS z@(x:+y) j =
   let
     (rh,k) = cSSqs z :: (a, Int)
@@ -174,7 +175,7 @@ cLogS z@(x:+y) j =
     t1 = 5/4
     t2 = 3
     
-cSSqs :: IEEE a
+cSSqs :: RealFloat a
       => Complex a   --z@(x:+y)
       -> (a, Int)    --(r,k) s.t. r=abs(z/2^k)^2
 cSSqs (x:+y) = (r1,k1) where
@@ -189,6 +190,20 @@ cSSqs (x:+y) = (r1,k1) where
 
 sq :: RealFloat a => a -> a
 sq z = z * z
+
+cLog :: RealFloat a => Complex a -> Complex a
+cLog z@(x:+y) = (p2 :+ phase z)
+  where
+    t0 = 1/(sqrt 2)
+    t1 = 1.25
+    t2 = 3.0
+    (p,k) = cSSqs z
+    
+    b = max (abs x) (abs y)
+    th = min (abs x) (abs y)
+    p2 | k == 0 && t0 < b && (b <= t1 || p < t2) = log1p((b-1)*(b+1)+th*th)
+       | otherwise = log(p)/2 + fromIntegral k*log 2
+  
 
 
 
@@ -229,7 +244,7 @@ cSqrt z@(x:+y) = w1:+n1
 
 
 
-cSqrt :: IEEE a => Complex a -> Complex a
+cSqrt :: RealFloat a => Complex a -> Complex a
 cSqrt z@(x:+y) = w1:+n1
   where
     (r,k) = cSSqs z
@@ -244,19 +259,8 @@ cSqrt z@(x:+y) = w1:+n1
                                                          else n
                           in if x < 0 then (abs n2, copySign r3 y)
                                       else (w, n2)
-    
 
-mx :: forall a. RealFloat a => a  
-mx = encodeFloat m n where
-    b = floatRadix a
-    e = floatDigits a
-    (_, e') = floatRange a
-    m = b ^ e - 1
-    n = e' - e
-    a = undefined :: a
-
-
-_cSquare :: forall a. IEEE a => Complex a -> Complex a
+_cSquare :: forall a. RealFloat a => Complex a -> Complex a
 _cSquare (w:+n) | isNaN x = if | isInfinite y -> copySign 0 w :+ y
                                | isInfinite n -> (-1/0) :+ y
                                | isInfinite w -> 1/0 :+ y
@@ -267,4 +271,12 @@ _cSquare (w:+n) | isNaN x = if | isInfinite y -> copySign 0 w :+ y
     x = (w-n)*(w+n)
     y = wn+wn
     wn = w*n
-    
+
+copySign :: RealFloat a => a -> a -> a
+copySign x y | makePos   = abs x
+             | otherwise = negate $ abs x
+  where
+    makePos | isNegativeZero y = False
+            | y < 0            = False
+            | otherwise        = True
+
