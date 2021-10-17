@@ -180,7 +180,7 @@ inverseTests match = concat $
                    ,(Tanh, Atanh)
                     ]
   , x <- map fixPi xs, y <- map fixPi xs, let z = x:+y
-  , isInRange invFn z
+  , isInversable invFn z
   , let fnFz = fnF fn z
   , isGood (realPart fnFz) && isGood (imagPart fnFz)
   , not (isBranchPoint invFn fnFz)  --exp exp of many things maps to 0:+0, log 0:+0 only maps back to one of them.
@@ -322,6 +322,15 @@ branchCutPointQuadrant Atanh (x:+0) | x < (-1) = Just QII
                                     | x > 1    = Just QIV
 branchCutPointQuadrant _     _                 = Nothing
 
+--Due to rounding, some D0 things close to the edge of the range map to the branch cut and don't inverse properly.
+isInversable :: RealFloat a => Function -> Complex a -> Bool
+isInversable fn z | not (isInRange fn z) = False
+isInversable fn    (x:+y) | isIEEE x = True
+isInversable Sqrt  (x:+y) | abs x <= mn && y <= 0 && y >= -0.5 = False
+isInversable Acosh (x:+y) | abs x <= mn && y <= 0 = False
+isInversable _ _ = True
+
+--This is the "pure" definition of the ranges (though I've not have to list all non-IEEE exclusions).
 isInRange :: RealFloat a => Function -> Complex a -> Bool
 isInRange Sqrt  (0:+y) | notIEEE y && y < 0 = False
 isInRange Sqrt  (x:+y) | isNegativeZero x = False
@@ -334,7 +343,7 @@ isInRange Acos  (x:+y) | isNegativeZero x = False
                        | otherwise = 0 <= x && x <= pi
 isInRange Atan  (x:+y) = abs x <= pi / 2
 isInRange Asinh (x:+y) = abs y <= pi / 2
-isInRange Acosh (x:+y) | notIEEE x && abs x <= mn && y < 0 = False  --strictly only x==0 excluded, but we need this so rounding doesn't create issue for D0
+isInRange Acosh (0:+y) | notIEEE y && y < 0 = False
 isInRange Acosh (x:+y) | notIEEE x && x == -pi = False
 isInRange Acosh (x:+y) | isNegativeZero x = False
                        | otherwise = x >= 0 && abs y <= pi
@@ -458,17 +467,17 @@ override Acosh ((-1.0) C.:+ ( 6.2138610988780994e-21))  = Just $   7.88280476662
 override Acosh (( 1.0) C.:+ (-6.2138610988780994e-21))  = Just $   7.8828047666284996e-11            C.:+ (-7.8828047666284996e-11)
 override Acosh (( 1.0) C.:+ ( 6.2138610988780994e-21))  = Just $   7.8828047666284996e-11            C.:+   7.8828047666284996e-11
 
-override Atanh (2.718281828459045 C.:+ ( 5.0e-324))     = Just $   0.3859684164526524                C.:+ ( 1.570796326794897) --WA is WRONG! It thinks this is on the branch cut.
-                                                                                                                               --It gets e.g. 5.0e-19 right
-override Atanh (2.718281828459045 C.:+ (-5.0e-324))     = Just $   0.3859684164526524                C.:+ (-1.570796326794897)
-override Atanh (3.141592653589793 C.:+ ( 5.0e-324))     = Just $   0.3297653149566991                C.:+ ( 1.570796326794897) --ditto
-override Atanh (3.141592653589793 C.:+ (-5.0e-324))     = Just $   0.3297653149566991                C.:+ (-1.570796326794897)
-
+--For these, I think the old atanh was wrong.
+--I also think WA IS WRONG! (WA seems to think these are on the branch cut and goes in wrong direction. It gets e.g. 5.0e-19 right).
+override Atanh z@(x C.:+ ( 5.0e-324))  | x > 2 && x < 4 = Just $   x' C.:+ ( 1.570796326794897)
+  where x' C.:+ _ = atanh z
+override Atanh z@(x C.:+ (-5.0e-324))  | x > 2 && x < 4 = Just $   x' C.:+ (-1.570796326794897)
+  where x' C.:+ _ = atanh z
 --these match Float values:
-override Atanh (2.7182817 C.:+   1.0e-45 ) = Just $ 0.38596845 C.:+   1.5707964
-override Atanh (2.7182817 C.:+ (-1.0e-45)) = Just $ 0.38596845 C.:+ (-1.5707964)
-override Atanh (3.1415927 C.:+   1.0e-45 ) = Just $ 0.32976532 C.:+   1.5707964
-override Atanh (3.1415927 C.:+ (-1.0e-45)) = Just $ 0.32976532 C.:+ (-1.5707964)
+override Atanh z@(x C.:+ ( 1.0e-45))  | x > 2 && x < 4 = Just $   x' C.:+ ( 1.5707964)
+  where x' C.:+ _ = atanh z
+override Atanh z@(x C.:+ (-1.0e-45))  | x > 2 && x < 4 = Just $   x' C.:+ (-1.5707964)
+  where x' C.:+ _ = atanh z
 
 override _ z = Nothing
 
@@ -477,7 +486,8 @@ override _ z = Nothing
 ------------------------------------
 
 xs :: RealFloat a => [a]
-xs =  andNegs [0, 1, pi/2, 2, e, 3, pi, 4, 5]
+xs =  andNegs (map fromRational $ take 51 $ iterate (+0.1) 0)
+   ++ andNegs [pi/2, e, pi]
    ++ andNegs (take 5 $ iterate sqrt mx)
    ++ andNegs (take 5 $ iterate sqrt mn)
   where e = exp 1
