@@ -2,25 +2,18 @@
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE ExplicitForAll, TypeApplications, ScopedTypeVariables #-}
 
+--NB This now tests quite a lot of different values. It's a bit slow unless compiled.
+
+import MyComplex -- import this to test new implementation
+--import Data.Complex  -- import this instead to show errors in old implementation.
+                       -- (regression tests will work pretty well, except where I've given overrides).
 
 import HasVal
 import Double0
-
---Switch between these to test old / new results:
 import qualified Data.Complex as C
-import MyComplex 
 import qualified MyFloat as F
 import Data.Char
 import Data.Maybe
-
-{- TO ADD:
-inverse function tests, inc phase is inverse of cis, for all +/- 0, +/- pi combinations.
-atanh with 1, -1, tiny values (less that rh).
-(esp atanh $ (1) :+ (1e-300) == 177.09 :+ 0.785. WA says 345.7 :+ (-0.785)
-Regression tests vs old Data.Complex.
-Tests for log1p etc
-tests for phase, magnitude, etc.
--}
 
 ------------------------------------
 --Tests
@@ -82,7 +75,7 @@ bugFixTests = concat
   ]
 
 sqrtTests ::  forall a. (RealFloat a, Show a) => [Test a]
-sqrtTests = concat $
+sqrtTests = concat $  --all based on the expectations listed in Kahan's CSQRT function.
      [ testC False "sqrt #1  sqrt " (show z) (sqrt z) (E 0)   (E $  abs (sqrt x)) | x <- xs, x >= 0, let z = (-x)  :+   0   ] 
   ++ [ testC True  "sqrt #2  sqrt " (show z) (sqrt z) (E 0)   (E $ -abs (sqrt x)) | x <- xs, x >= 0, let z = (-x)  :+ (-0  )]
   ++ [ testC False "sqrt #3  sqrt " (show z) (sqrt z) (E inf) (E   inf )    | x <- xs ++ bads, let z =   x   :+ ( inf)]
@@ -376,6 +369,7 @@ isBranchPoint _ _             = False
 data Part = Real | Imag
   deriving (Eq, Show)
 
+--when "out of bounds" we end up (correctly, I think) doing 0 * Infinity giving NaN.
 outOfBounds :: RealFloat a => Function -> Complex a -> Maybe Part
 outOfBounds Exp  (x:+0) |     x > logmx = Just Imag
 outOfBounds Sin  (0:+y) | abs y > logmx = Just Real
@@ -384,6 +378,8 @@ outOfBounds Sinh (x:+0) | abs x > logmx = Just Imag
 outOfBounds Cosh (x:+0) | abs x > logmx = Just Imag
 outOfBounds _    _                      = Nothing
 
+--This is where overflow Infinity/NaN incorrectly happens in existing functions.
+--(Hence I can't regression test against them).
 expectedRegression :: (HasVal a, RealFloat a) => Function -> Complex a -> Bool
 -- deal with any infinities first.
 -- then subsequent logic (e.g. abs x > blah) isn't accidentally failing to check infinities
