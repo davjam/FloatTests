@@ -466,7 +466,7 @@ maxNonInfiniteFloat = encodeFloat m n where
 -- and the other functions map complex numbers to complex numbers.
 -- All of the branch cuts fall on axes.
 --
--- The expression @x >= +0.0@, and similar, excludes @x@ where @isNegativeZero z@ is @True@.
+-- The expression @x >= +0.0@, and similar, excludes @x@ where @isNegativeZero x@ is @True@.
 --
 -- The behaviour of types @Complex a@ for a value on a branch cut is different,
 -- depending on whether floating type @a@ supports signed zeros.
@@ -517,14 +517,14 @@ maxNonInfiniteFloat = encodeFloat m n where
 -- (Branch Cuts for Complex Elementary Functions or Much Ado About Nothing's Sign Bit, 1987),
 -- and are consitant with those in some other languages such as Common Lisp.
 --
--- Note that the result for "positive" @0.0@ (for types that support signed zeros)
--- is not necessarily the same for the result for (unsigned) @0.0@ (for those that types that don't).
+-- Note that the result for (unsigned) @0.0@ (for types that don't support signed zeros)
+-- is not necessarily the same as that for "positive" @0.0@ (for those that types that do).
 -- For example:
 --
--- >>> asin $ 2.0 :+ (0.0) :: Complex SomeIEEEFloatingType
--- 1.570 :+ 1.316
--- >>> asin $ 2.0 :+ (0.0) :: Complex SomeNonIEEEFloatingType
+-- >>> asin $ 2.0 :+ 0.0 :: Complex SomeNonIEEEFloatingType
 -- 1.570 :+ (-1.316)
+-- >>> asin $ 2.0 :+ 0.0 :: Complex SomeIEEEFloatingType
+-- 1.570 :+ 1.316
 --
 -- $BranchCutsExp
 --
@@ -588,3 +588,9 @@ maxNonInfiniteFloat = encodeFloat m n where
 -- Hence 'sqrt' of points on the branch cut are continuous with 'sqrt' of points in QII on the complex plane.
 -- In addition, 'sqrt' will not map anything to @( 0.000):+(-2.0)@, or any other point
 -- on the negative imaginary axis (0, -&#x221E;/i/], which is excluded from the range.
+--
+--     Note that "continous with" doesn't mean "maps into" or "maps towards".
+--     For example, the first branch cut listed for @cos@ is marked as "continuous with QII".
+--     Hence both @(-2) :+ 0@ (a point on this branch cut) and
+--     @(-2) :+ 0.1@ (a nearby point in QII) are both mapped by @cos@ to locations near each other,
+--     but in QIV.
