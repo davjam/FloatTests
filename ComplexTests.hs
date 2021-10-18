@@ -68,8 +68,8 @@ bugFixTests = concat
    let z = (-4):+0     in testC False "#20425 #1 sqrt"                (show z) (sqrt z)  (E 0)     (E 2)
   ,let z = (-4):+(-0)  in testC True  "#20425 #2 sqrt"                (show z) (sqrt z)  (E 0)     (E (-2))
   ,let z = mx:+mx      in testC False "#20425 #3 sqrt"                (show z) (sqrt z)  R         R     --extremeSqrtTests has more precise test
-  ,let z = (-1):+0     in testC False "#8532 #1 acosh"                (show z) (acosh z) (E 0)     (A pi)
-  ,let z = (-1):+0     in testC False "#8532 #1 acosh"                (show z) (acosh z) (E 0)     (A pi)
+  ,let z = (-1):+0     in testC False "#8532 #1 acosh"                (show z) (acosh z) (E 0)     (E pi)
+  ,let z = (-1):+(-0)  in testC False "#8532 #2 acosh"                (show z) (acosh z) (E 0)     (E $ if isIEEE (realPart z) then -pi else pi)
   ,let z = 1e-20:+0    in testC False "atan email #1 atan"            (show z) (atan  z) (E 1e-20) (E 0)
   ,let z = 0:+1e-20    in testC False "atan email #2 atan"            (show z) (atan  z) (E 0)     (E 1e-20)
   ,let z = 0:+0        in testC False "log"                           (show z) (log   z) (E (-inf))(E 0)
@@ -83,8 +83,8 @@ bugFixTests = concat
 
 sqrtTests ::  forall a. (RealFloat a, Show a) => [Test a]
 sqrtTests = concat $
-     [ testC False "sqrt #1  sqrt " (show z) (sqrt z) (E 0)   (A $  sqrt x) | x <- xs, x >= 0, let z = (-x)  :+   0   ] 
-  ++ [ testC True  "sqrt #2  sqrt " (show z) (sqrt z) (E 0)   (A $ -sqrt x) | x <- xs, x >= 0, let z = (-x)  :+ (-0  )]
+     [ testC False "sqrt #1  sqrt " (show z) (sqrt z) (E 0)   (E $  abs (sqrt x)) | x <- xs, x >= 0, let z = (-x)  :+   0   ] 
+  ++ [ testC True  "sqrt #2  sqrt " (show z) (sqrt z) (E 0)   (E $ -abs (sqrt x)) | x <- xs, x >= 0, let z = (-x)  :+ (-0  )]
   ++ [ testC False "sqrt #3  sqrt " (show z) (sqrt z) (E inf) (E   inf )    | x <- xs ++ bads, let z =   x   :+ ( inf)]
   ++ [ testC False "sqrt #4  sqrt " (show z) (sqrt z) (E inf) (E (-inf))    | x <- xs ++ bads, let z =   x   :+ (-inf)]
   ++ [ testC False "sqrt #5  sqrt " (show z) (sqrt z) (E nan) (E nan)       | x <- xs        , let z = nan   :+ x     ]
@@ -99,7 +99,7 @@ sqrtTests = concat $
 
 extremeSqrtTests :: [Test Double]
 extremeSqrtTests = concat $
-  [ testC False "sqrt " (show z) (sqrt z) (A u) (A v) | (z,u:+v) <- extremes ++ ex2]
+  [ testC False "sqrt " (show z) (sqrt z) (B u) (B v) | (z,u:+v) <- extremes ++ ex2]
   where
     extremes =
       [ --expected results from WolframAlpha
@@ -121,7 +121,7 @@ realCpxMatchTests = concat
   --check imag is zero, but don't care what sign
   --since it's difficult to predict e.g. cos (3:+0) has -0.0, cos (4:+0) has 0.0.
   --(Conjugte check with check that cos (3:+0) is conj of cos (3:+(-0)), etc).
-  [ testC False (fnName fn) (show z) fz (A' fx) oob
+  [ testC False (fnName fn) (show z) fz (B fx) oob
   | fn <- allFunctions
   , x <- xs
   , not (exclude fn x)
@@ -195,14 +195,22 @@ inverseTests match = concat $
         fixPi (-1.5707964) = -1.5707963
         fixPi x            = x
 
+--The expected results are calculated by gnumeric spreadsheet, which doesn;t support negative zeros.
+--(Perhaps this, and the results, should only work for type D0 - but I thought it best to test with all).
+--Hence we push any -0 results to 0 before testing, and (for points on branch cut), map to the +/- zero
+--we'd expect to give the right result.
 gnumericTests :: (RealFloat a, Show a) => [Test a]
 gnumericTests = concatMap testFn allFunctions where
   testFn fn = concat $ zipWith testVal zs (fnYs fn) where
-    testVal z (C (u:+v)) | isIEEE u  = testC False (fnName fn) (show z') (fnF fn z') (A u) (A v)
-                         | otherwise = testC False (fnName fn) (show z ) (fnF fn z ) (A u) (A v)
+    testVal z (C (u:+v)) | isIEEE u  = testC False (fnName fn) (show z') (pushToPlusZero $ fnF fn z') (B u) (B v)
+                         | otherwise = testC False (fnName fn) (show z ) (pushToPlusZero $ fnF fn z ) (B u) (B v)
       where z' | Just q <- branchCutPointQuadrant fn z = pushToQuadrant q z
                | otherwise                             =                  z
     testVal _ Err        = []
+    pushToPlusZero (x:+y) = ppz x :+ ppz y
+      where
+        ppz r | isNegativeZero r = 0
+              | otherwise        = r
   zs = [x:+y|y<-gnumericXs,x<-gnumericXs]
 
 

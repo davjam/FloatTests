@@ -10,7 +10,7 @@ import Control.Monad
 
 data Expected a = E a    --exactly
                 | A a    --approximately (but to many sfs)
-                | A' a   --like A, but if 0, -0, Inf, -Inf, NaN checked exactly (including sign)
+                | B a    --like A, but if 0, -0, Inf, -Inf, NaN checked exactly (including sign)
                 | A2 Int a  --like A, but to less precision.
                 | R      --any real (not Inf, not NaN)
                 | NNaN   --not NaN
@@ -43,7 +43,7 @@ hasFltVal _   x (E y) | isNaN y          = isNaN x
                       | isNegativeZero y = isNegativeZero x
                       | isNegativeZero x = False
                       | otherwise        = x == y
-hasFltVal bps x (A' y) | isNaN y          = isNaN x
+hasFltVal bps x (B y) | isNaN y          = isNaN x
                        | isNaN x          = False
                        | y == 0           = x == y && isNegativeZero x == isNegativeZero y
                        | isInfinite y     = x == y
