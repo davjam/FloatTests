@@ -466,7 +466,7 @@ maxNonInfiniteFloat = encodeFloat m n where
 -- and the other functions map complex numbers to complex numbers.
 -- All of the branch cuts fall on axes.
 --
--- The expression @x >= +0.0@, and similar, excludes @x@ where @isNegativeZero x@ is @True@.
+-- In this table, the expression @x >= +0.0@ and similar excludes @x@ where @isNegativeZero x@ is @True@.
 --
 -- The behaviour of types @Complex a@ for a value on a branch cut is different,
 -- depending on whether floating type @a@ supports signed zeros.
@@ -513,22 +513,36 @@ maxNonInfiniteFloat = encodeFloat m n where
 -- + negative imaginary + QIII          + QIV           +
 -- +--------------------+---------------+---------------+
 --
--- Haskell's branch cuts, continuities and ranges follow the recommendations by Kahan 
+-- Some (inverse) functions also have branch points as follows:
+--
+-- +--------------------+-----------------+-------------------------+
+-- + (inverse) function + branch point    + value at branch point   +
+-- +====================+=================+=========================+
+-- + 'log'              + @0.0 :+ 0.0@    + @(-Infinity) :+ 0.0@    +
+-- +--------------------+-----------------+-------------------------+
+-- + 'atan'             + @0.0 :+ 1.0@    + @0.0 :+ Infinity@       +
+-- +--------------------+-----------------+-------------------------+
+-- + 'atan'             + @0.0 :+ (-1.0)@ + @0.0 :+ (-Infinity)@    +
+-- +--------------------+-----------------+-------------------------+
+-- + 'atanh'            + @1.0 :+ 0.0@    + @Infinity :+ 0.0@       +
+-- +--------------------+-----------------+-------------------------+
+-- + 'atanh'            + @(-1.0) :+ 0.0@ + @(-Infinity) :+ 0.0@    +
+-- +--------------------+-----------------+-------------------------+
+--
+-- For 'log', branch points with a negative zero real part are included in
+-- the branch cut, giving different results for
+-- branch points with positive and negative zero in the imaginary part.
+-- For other branch points, a negative zero input will be reflected in the output.
+--
+-- Haskell's branch cuts, continuities, ranges and branch points follow the recommendations by Kahan 
 -- (Branch Cuts for Complex Elementary Functions or Much Ado About Nothing's Sign Bit, 1987),
 -- and are consitant with those in some other languages such as Common Lisp.
 --
--- Note that the result for (unsigned) @0.0@ (for types that don't support signed zeros)
--- is not necessarily the same as that for "positive" @0.0@ (for those that types that do).
--- For example:
---
--- >>> asin $ 2.0 :+ 0.0 :: Complex SomeNonIEEEFloatingType
--- 1.570 :+ (-1.316)
--- >>> asin $ 2.0 :+ 0.0 :: Complex SomeIEEEFloatingType
--- 1.570 :+ 1.316
---
 -- $BranchCutsExp
 --
--- This is an explanation of the above for the function 'sqrt'.
+-- ===Branch Cuts
+--
+-- This is an explanation of the branch cuts for the function 'sqrt'.
 -- The same principles apply to the other functions.
 --
 -- Consider 'sqrt' of real numbers.
@@ -594,3 +608,39 @@ maxNonInfiniteFloat = encodeFloat m n where
 --     Hence both @(-2) :+ 0@ (a point on this branch cut) and
 --     @(-2) :+ 0.1@ (a nearby point in QII) are both mapped by @cos@ to locations near each other,
 --     but in QIV.
+--
+-- The result for (unsigned) @0.0@ (for types that don't support signed zeros)
+-- is not necessarily the same as that for "positive" @0.0@ (for those that types that do).
+-- For example:
+--
+-- >>> asin $ 2.0 :+ 0.0 :: Complex SomeNonIEEEFloatingType
+-- 1.570 :+ (-1.316)
+-- >>> asin $ 2.0 :+ 0.0 :: Complex SomeIEEEFloatingType
+-- 1.570 :+ 1.316
+--
+-- ===Branch Points
+--
+-- This is an explanation of the branch point for the function 'log'.
+-- The same principles apply to the other functions.
+--
+-- Mathematically \(e^x\to0\) as \(x\to-\infty\) and
+-- \(\log 0\) is undefined.
+-- Computationally it is usually helpful
+-- (and is required by IEEE 754) to give @-Infinity@:
+--
+-- >>> log 0.0
+-- -Infinity
+--
+-- For complex numbers, @exp (x:+y) == mkPolar (exp x) y@,
+-- i.e. a point distance @exp x@ from the origin, at angle @y@.
+-- As @x@ tends to @-Infinity@, this point tends to @0.0 :+ 0.0@,
+-- but from different angles depending on @y@.
+-- Hence @exp $ (-1/0.0) :+ y@ gives @0.0 :+ 0.0@ for any @y@.
+--
+-- The inverse function 'log' could map @0.0 :+ 0.0@ to /any/ @-Infinity :+ y@.
+-- The point @0.0 :+ 0.0@ is called a /branch point/ of 'log'.
+-- An arbirary, but standard, choice (which must be within the principle value range)
+-- is made for the result, as shown in the table above:
+--
+-- >>> log $ 0.0 :+ 0.0
+-- (-Infinity) :+ 0.0
