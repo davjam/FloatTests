@@ -1,14 +1,19 @@
 {-# OPTIONS -Wall -Wpartial-fields #-}
 
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Main (main) where
 
+import           Prelude hiding (sqrt, exp, log, sin, asin, cos, acos, tan, atan, sinh, asinh, cosh, acosh, tanh, atanh)
+import qualified Prelude as P (sqrt, exp, log, sin, asin, cos, acos, tan, atan, sinh, asinh, cosh, acosh, tanh, atanh)
+
 import           Data.Foldable
-import           Numeric
+import           Numeric (showFFloat)
 import           Control.Monad
 import qualified Text.Blaze.Html5                as H
 import qualified Text.Blaze.Html5.Attributes     as HA
@@ -18,15 +23,13 @@ import qualified Text.Blaze.Svg11.Attributes     as SA
 --import           Text.Blaze.Html.Renderer.Pretty  --looks better in editor
 import           Text.Blaze.Html.Renderer.String    --looks better in browser inspection pane
 import           Text.Printf
+import           System.Directory
+import           Debug.Trace
 
---CHANGE THIS TO TEST EXISTING Data.Complex (DONT FORGET TO CHANGE MAIN)
---import Data.Complex
-import MyComplex
+import qualified OldComplex   as O  --Old implementation
+import qualified MyComplex    as N  --New implementation
+import Double0
 
---Import this to test with non-IEEE floats
---import Double0
-
-import Debug.Trace
 
 ------------------------------------
 -- Overall document
@@ -37,19 +40,20 @@ import Debug.Trace
 
 main :: IO ()
 main = do
-  --CHANGE THIS TOO
-  --writeGraphsDoc True FullGraph currPlots  "TrigDiags\\Curr.html"
-  writeGraphsDoc True FullGraph currPlots "TrigDiags\\Fixed.html"
-  --writeGraphsDoc True FullGraph currPlots "TrigDiags\\FloatFixed.html"
-  --writeGraphsDoc True FullGraph currPlots "TrigDiags\\D0Fixed.html"
+  createDirectoryIfMissing False "TrigDiags"
+  writeGraphsDoc @(O.Complex Double) True FullGraph currPlots "TrigDiags\\Curr.html"
+  writeGraphsDoc @(N.Complex Double) True FullGraph currPlots "TrigDiags\\Fixed.html"
+  writeGraphsDoc @(N.Complex Float ) True FullGraph currPlots "TrigDiags\\FloatFixed.html"
+  writeGraphsDoc @(N.Complex D0    ) True FullGraph currPlots "TrigDiags\\D0Fixed.html"
 
 _t1 :: IO ()  --used for testing little bits
-_t1 = writeGraphsDoc True [AnnulusSectorSeg A3 7 CO] [("id", id), ("acosh", acosh)] "TrigDiags\\Test.html"
+_t1 = writeGraphsDoc @(N.Complex Double) True [AnnulusSectorSeg A3 7 CO] [("id", id), ("acosh", acosh)] "TrigDiags\\Test.html"
 
-writeGraphsDoc :: Graphable a => Bool -> a -> PlotList -> FilePath -> IO ()
-writeGraphsDoc includeAxes graphable plotList filePath = writeFile filePath $ renderHtml $ graphsDoc includeAxes graphable plotList
+writeGraphsDoc :: (IsComplex c a, Graphable b c a) => Bool -> b -> PlotList c a -> FilePath -> IO ()
+writeGraphsDoc includeAxes graphable plotList filePath = trace filePath $
+  writeFile filePath $ renderHtml $ graphsDoc includeAxes graphable plotList
 
-graphsDoc :: Graphable a => Bool -> a -> PlotList -> H.Html
+graphsDoc :: (IsComplex c a, Graphable b c a) => Bool -> b -> PlotList c a -> H.Html
 graphsDoc includeAxes graphable plotList = H.docTypeHtml ! SA.lang "en" $ do
   H.head $ do
     H.meta ! HA.charset "utf-8"
@@ -71,13 +75,11 @@ graphsDoc includeAxes graphable plotList = H.docTypeHtml ! SA.lang "en" $ do
   H.body $
     traverse_ (uncurry $ graph includeAxes graphable) plotList
 
-type PlotList = [(Title, PlotFn)]
-type Title    = String
-type PlotFn   = Pt -> Pt
-type Pt       = Complex R
-type R        = Double
---type R        = Float
---type R        = D0
+type PlotList c a = [(Title, PlotFn c a)]
+type Title        = String
+type PlotFn c a   = Pt c -> Pt c
+type Pt c         = c
+type R a          = a
 
 {-
 Keep R as Double
@@ -94,7 +96,7 @@ has some kind of "step" change L
 > asin (-1649 :: Complex Float)
 (-1.5707964) :+ 8.317766
 -}
-currPlots :: PlotList
+currPlots :: (IsComplex c a) => PlotList c a
 currPlots =
   [ ("id"                     , id                      )
   , ("sqrt"                   , sqrt                    )
@@ -114,7 +116,7 @@ currPlots =
   , ("atanh"                  , atanh                   )
   ]
 
-graph :: Graphable a => Bool -> a -> Title -> PlotFn -> H.Html
+graph :: forall a b c. (IsComplex c a, Graphable b c a) => Bool -> b -> Title -> PlotFn c a -> H.Html
 graph includeAxes graphable title plotFn = trace title $ do
   H.h1 $ H.toHtml title
   S.svg ! SA.width "800" ! SA.height "800"
@@ -122,23 +124,23 @@ graph includeAxes graphable title plotFn = trace title $ do
         ! SA.class_ "coords"
         $ do
     toSvg fullGraph
-    when includeAxes $ S.g ! SA.class_ "axes" $ traverse_ toSvg axes --axes last, so they appear on top.
+    when includeAxes $ S.g ! SA.class_ "axes" $ traverse_ toSvg  axes --axes last, so they appear on top.
   H.p $ do "("; H.toHtml $ pointCount fullGraph; " pts)"
   H.hr
   where
-    fullGraph = graphSvg plotFn graphable
+    fullGraph = graphSvg plotFn graphable :: SVG c a
 
-    axes :: [SVG]
+    axes :: [SVG c a]
     axes = xAxis ++ yAxis
       where
-        xAxis = SVG (Line CentreZeros (negate 4.2 :+ 0) (4.2 :+ 0))
+        xAxis = SVG (Line CentreZeros (negate 4.2 +:+ 0) (4.2 +:+ 0))
               :  map (tick True)  [-4,-3,-2,-1,1,2,3,4]
               ++ map (tick False) [-pi,-pi/2,pi/2,pi]
         yAxis = map (trans rot90) xAxis
         tick major x = SVG $ Line CentreZeros (x + offs) (x - offs)
           where
-            offs | major     = 0 :+ 0.08
-                 | otherwise = 0 :+ 0.06
+            offs | major     = 0 +:+ 0.08
+                 | otherwise = 0 +:+ 0.06
 
 ------------------------------------
 -- Graphable things
@@ -191,8 +193,12 @@ data AnnulusSectorSegId = R0 | CO | R1 | CI  --in order of polygon traversal: ra
   deriving (Show, Enum, Bounded)
 
 
-allParallels :: [Parallel]
-allParallels = [Parallel o pId | o <- enumerate, pId <- enumerate]
+allParallels :: forall a. RealFloat a => [Parallel]
+allParallels = [Parallel o pId | o <- enumerate, pId <- enumerate, parallelReqd pId]
+  where
+    parallelReqd _   | isIEEE (undefined :: a) = True
+    parallelReqd PN0                           = False
+    parallelReqd _                             = True
 
 parallelSegs :: Parallel -> [ParallelSeg]
 parallelSegs (Parallel o PN3) = [ParallelSeg o B s  P3S    | s <- enumerate]
@@ -204,7 +210,7 @@ parallelSegs (Parallel o PP1) = [ParallelSeg o T s (P1S p) | s <- enumerate, p <
 parallelSegs (Parallel o PP3) = [ParallelSeg o T s  P3S    | s <- enumerate]
 parallelSegs (Parallel o PP2) = [ParallelSeg o T s  P2S    | s <- enumerate]
 
-parallelSegPath :: ParallelSeg -> ParamPath
+parallelSegPath :: forall c a. (IsComplex c a) => ParallelSeg -> ParamPath c a
 parallelSegPath (ParallelSeg o tb lr p) = ParamPath (toValue lr <> toValue p) w co d pathFn start end
   where
     pathFn = rot . flipV . flipH . part
@@ -218,10 +224,10 @@ parallelSegPath (ParallelSeg o tb lr p) = ParamPath (toValue lr <> toValue p) w 
       L -> flipHoriz
       R -> id
     part = case p of
-      (P0S _) -> (:+ 0)
-      (P1S _) -> (:+ 1)
-      P2S     -> (:+ 2)
-      P3S     -> (:+ 3)
+      (P0S _) -> (+:+ 0)
+      (P1S _) -> (+:+ 1)
+      P2S     -> (+:+ 2)
+      P3S     -> (+:+ 3)
     (start, end) = case p of
       (P0S P0Sa) -> (tiny, 0.5)
       (P0S P0Sb) -> (0.5, 1)
@@ -230,31 +236,13 @@ parallelSegPath (ParallelSeg o tb lr p) = ParamPath (toValue lr <> toValue p) w 
       (P1S P1Sa) -> (2, tiny)
       (P1S P1Sb) -> (2, big)
       _        -> (tiny, big)
-    w = case (o, tb, lr, p) of
-      --(Horiz, _, L, P0S _) -> 0.07
-      --(Vert,  _, R, P0S _) -> 0.07
-      (_   ,  T, _, P0S _) -> 0.03
-      (_   ,  B, _, P0S _) -> 0.06
-      --(Horiz, B, L, _    ) -> 0.03
-      --(Vert,  B, R, _    ) -> 0.03
+    w = case (isIEEE a, tb, lr, p) of
+      (False, T, _, P0S _) -> 0.04
+      (_    , T, _, P0S _) -> 0.03
+      (_    , B, _, P0S _) -> 0.06
       _                    -> 0.015
+    a = undefined :: a
     co = case (o, tb, lr, p) of
-{-      
-      --colours from https://www.pinterest.co.uk/pin/426012445987636198/
-      (Horiz, _ , R, P0S _) -> "rgb(125,255,0)"
-      (Horiz, _ , L, P0S _) -> "rgb(125,0,255)"
-      (Horiz, T , R, _    ) -> "rgb(255,255,0)"
-      (Horiz, T , L, _    ) -> "rgb(255,0,255)"
-      (Horiz, B , L, _    ) -> "rgb(0,0,255)"
-      (Horiz, B , R, _    ) -> "rgb(0,255,0)"
-
-      (Vert , _ , R, P0S _) -> "rgb(0,255,255"
-      (Vert , _ , L, P0S _) -> "rgb(255,0,0)"
-      (Vert , T , R, _    ) -> "rgb(0,255,0)"
-      (Vert , T , L, _    ) -> "rgb(255,255,0)"
-      (Vert , B , L, _    ) -> "rgb(255,0,255)"
-      (Vert , B , R, _    ) -> "rgb(0,0,255)"
--}
       --colours from https://www.deviantart.com/otipeps/art/The-Color-Wheel-16-colors-695466699
       (Horiz, _ , R, P0S _) -> "blue"
       (Horiz, _ , L, P0S _) -> "orange"
@@ -269,8 +257,6 @@ parallelSegPath (ParallelSeg o tb lr p) = ParamPath (toValue lr <> toValue p) w 
       (Vert , T , L, _    ) -> "violet"
       (Vert , B , L, _    ) -> "red"
       (Vert , B , R, _    ) -> "yellow"
-
-
     d = case (o, tb, p) of
       (_,     B, P0S _) -> "0.04,0.04"
       (Horiz, _, P0S _) -> ""
@@ -289,7 +275,7 @@ annulusSectors a = map (AnnulusSector a) $ reverse [0 .. annulusSectorCount a - 
 annulusSectorSegs :: AnnulusSector -> [AnnulusSectorSeg]
 annulusSectorSegs (AnnulusSector a sId) = map (AnnulusSectorSeg a sId) enumerate
 
-annulusSectorSegPath :: AnnulusSectorSeg -> ParamPath
+annulusSectorSegPath :: (IsComplex c a) => AnnulusSectorSeg -> ParamPath c a
 annulusSectorSegPath (AnnulusSectorSeg a s p) = ParamPath (toValue p) 0.01 "black" "" pathFn start end
   where
     (pathFn, start, end) = case p of
@@ -321,28 +307,28 @@ annulusSectorSegPath (AnnulusSectorSeg a s p) = ParamPath (toValue p) 0.01 "blac
 -- Graphable class and instances
 ------------------------------------
 
-class Graphable a where
-  graphSvg :: PlotFn -> a -> SVG
+class Graphable b c a where
+  graphSvg :: PlotFn c a -> b -> SVG c a
 
-instance Graphable a => Graphable [a] where
+instance (RealFloat a, Graphable b c a) => Graphable [b] c a where
   graphSvg plotFn xs = SVG $ map (graphSvg plotFn) xs
 
-instance Graphable FullGraph where
+instance (IsComplex c a) => Graphable FullGraph c a where
   graphSvg plotFn FullGraph = SVG
     [ SVG $ Group "annuli"    $ map (graphSvg plotFn) allAnnuli
-    , SVG $ Group "parallels" $ map (graphSvg plotFn) allParallels
+    , SVG $ Group "parallels" $ map (graphSvg plotFn) $ allParallels @a
     ]
 
-instance Graphable Parallel where
+instance (IsComplex c a) => Graphable Parallel c a where
   graphSvg plotFn p = SVG $ Group (toValue p) $ map (graphSvg plotFn) $ parallelSegs p
 
-instance Graphable ParallelSeg where
-  graphSvg = paramPathSvg
+instance (IsComplex c a) => Graphable ParallelSeg c a where
+  graphSvg = paramPathSvg @a
 
-instance Graphable Annulus where
+instance (IsComplex c a) => Graphable Annulus c a where
   graphSvg plotFn a = SVG $ Group (toValue a) $ map (graphSvg plotFn) $ annulusSectors a
 
-instance Graphable AnnulusSector where
+instance (IsComplex c a) => Graphable AnnulusSector c a where
   graphSvg plotFn sec@(AnnulusSector a s) = SVG $ Closed ("s" <> toValue s) sectorCol CentreZeros
                                                 $ map snd $ concatMap (paramPathPts plotFn) $ annulusSectorSegs sec
     where
@@ -350,8 +336,11 @@ instance Graphable AnnulusSector where
 
 --AnnulusSectorSeg not graphed individually in FullGraph (instead, the points from each seg are concat'd and SVGd as a Closed polygon).
 --But we want to be able to do this, e.g. for debugging a single segment.
-instance Graphable AnnulusSectorSeg where
-  graphSvg = paramPathSvg
+instance (IsComplex c a) => Graphable AnnulusSectorSeg c a where
+  graphSvg = paramPathSvg @a
+
+instance (IsComplex c a) => Graphable (ParamPath c a) c a where
+  graphSvg plotFn pp@(ParamPath cl w co d _ _ _) = SVG $ Path cl w co d SplitZeros $ map snd $ paramPathPts plotFn pp
 
 ------------------------------------
 -- Graphable item labels (used in class names of groups, polylines and polygones).
@@ -385,24 +374,24 @@ instance H.ToValue AnnulusSectorSegId where
 -- Paths
 ------------------------------------
 
-class HasParamPath a where
-  paramPath :: a -> ParamPath
+class HasParamPath b c a where
+  paramPath :: b -> ParamPath c a
 
-instance HasParamPath ParallelSeg where
+instance (IsComplex c a) => HasParamPath ParallelSeg c a where
   paramPath = parallelSegPath
 
-instance HasParamPath AnnulusSectorSeg where
+instance (IsComplex c a) => HasParamPath AnnulusSectorSeg c a where
   paramPath = annulusSectorSegPath
 
-instance HasParamPath ParamPath where
+instance (IsComplex c a) => HasParamPath (ParamPath c a) c a where
   paramPath = id
 
-paramPathSvg :: HasParamPath a => PlotFn -> a -> SVG
-paramPathSvg plotFn = graphSvg plotFn . paramPath
+paramPathSvg :: forall a b c. (IsComplex c a, HasParamPath b c a) => PlotFn c a -> b -> SVG c a
+paramPathSvg plotFn = graphSvg plotFn . (paramPath @b @c @a)
 
-data ParamPath = ParamPath Class Width Colour Dasharray PathFn R R
+data ParamPath c a = ParamPath Class Width Colour Dasharray (PathFn c a) a a
 
-_paramPathPt :: HasParamPath a => PlotFn -> a -> R -> Pt
+_paramPathPt :: (IsComplex c a, HasParamPath b c a) => PlotFn c a -> b -> R a -> Pt c
 _paramPathPt plotFn p = plotFn . pathFn
   where (ParamPath _ _ _ _ pathFn _ _) = paramPath p
 
@@ -411,16 +400,13 @@ type Width = Float
 type Colour = S.AttributeValue
 type Dasharray = S.AttributeValue
 
-type PathFn = R -> Pt --maybe the original line, or maybe transformed by a PlotFn
+type PathFn c a = a -> Pt c --maybe the original line, or maybe transformed by a PlotFn
 
-instance Graphable ParamPath where
-  graphSvg plotFn pp@(ParamPath cl w co d _ _ _) = SVG $ Path cl w co d SplitZeros $ map snd $ paramPathPts plotFn pp
-
-paramPathPts :: HasParamPath a => PlotFn -> a -> [(R, Pt)]
+paramPathPts :: (IsComplex c a, HasParamPath b c a) => PlotFn c a -> b -> [(R a, Pt c)]
 paramPathPts plotFn x = removeRedundantPoints $ pathFnPts (plotFn . pathFn) s e
   where (ParamPath _ _ _ _ pathFn s e) = paramPath x
 
-pathFnPts :: PathFn -> R -> R -> [(R, Pt)]
+pathFnPts :: (IsComplex c a) => PathFn c a -> R a -> R a -> [(R a, Pt c)]
 pathFnPts f s0 e0 | e0 < 1000  = pathFnPts' s0 e0
                   | isPeriodic = pathFnPts' s0 pi ++ pathFnPts' pi (1.5*pi) ++ pathFnPts' (1.5*pi) (2*pi)
                   | otherwise  = pathFnPts' s0 e0
@@ -434,10 +420,10 @@ pathFnPts f s0 e0 | e0 < 1000  = pathFnPts' s0 e0
         fe = f e
         backoff p other | p > 10 || p < 0.1 = if strictMonoton p sp other
                                                 then sp
-                                                else sp * sqrt other
+                                                else sp * P.sqrt other
                         | otherwise = p + signum (other - p) * 0.0005
           where
-            sp = sqrt p
+            sp = P.sqrt p
             strictMonoton x y z = x < y && y < z || x > y && y > z
     isPeriodic = f0 `isCloseTo` f2
               && f2 `isCloseTo` f4
@@ -452,7 +438,7 @@ pathFnPts f s0 e0 | e0 < 1000  = pathFnPts' s0 e0
         f3 = f $ s0 + 1 + 2*pi
         f4 = f $ s0     + 4*pi
 
-refinePts :: PathFn -> R -> R -> [(R, Pt)]
+refinePts :: (IsComplex c a) => PathFn c a -> R a -> R a -> [(R a, Pt c)]
 refinePts f s0 e0 = removeRedundantPoints $ (s0, fs0) : pathPts' s0 fs0 e0 (f e0)
   where
     fs0 = f s0
@@ -464,29 +450,29 @@ refinePts f s0 e0 = removeRedundantPoints $ (s0, fs0) : pathPts' s0 fs0 e0 (f e0
         fm = f m
         m  = midR s e
 
-midR :: R -> R -> R
+midR :: RealFloat a => R a -> R a -> R a
 midR 0 e = e / 2
 midR s 0 = s / 2
-midR s e = sqrt s * sqrt e
+midR s e = P.sqrt s * P.sqrt e
 
-isCloseTo :: Pt -> Pt -> Bool
+isCloseTo :: (IsComplex c a) => Pt c -> Pt c -> Bool
 x `isCloseTo` y = isSmall (realPart z) && isSmall (imagPart z)
   where
     z = x - y
     isSmall d = abs d < 0.05
 
-isOutside, isWayOut :: Pt -> Bool
+isOutside, isWayOut :: (IsComplex c a) => Pt c -> Bool
 isOutside = isOut 10
 isWayOut  = isOut 1000
 
-isOut :: R -> Pt -> Bool
+isOut :: (IsComplex c a) => R a -> Pt c -> Bool
 isOut lim p = isOff (realPart p) || isOff (imagPart p)
   where isOff r | isNaN r      = True
                 | isInfinite r = True
                 | abs r > lim  = True
                 | otherwise    = False
 
-maxNonInfiniteFloat :: forall a. RealFloat a => a
+maxNonInfiniteFloat :: forall a. RealFloat a => R a
 maxNonInfiniteFloat = encodeFloat m n where
     b = floatRadix a
     e = floatDigits a
@@ -495,20 +481,23 @@ maxNonInfiniteFloat = encodeFloat m n where
     n = e' - e
     a = undefined :: a
 
-minPositiveFloat :: forall a. RealFloat a => a
+minPositiveFloat :: forall a. RealFloat a => R a
 minPositiveFloat = encodeFloat 1 $ fst (floatRange a) - floatDigits a
   where a = undefined :: a
 
-big, tiny :: R
-big  = sqrt $ sqrt maxNonInfiniteFloat
-tiny = sqrt $ sqrt minPositiveFloat
+big, tiny :: RealFloat a => R a
+big  = P.sqrt $ P.sqrt maxNonInfiniteFloat
+tiny = P.sqrt $ P.sqrt minPositiveFloat
 
-rot90, flipHoriz, flipVert :: Pt -> Pt
+rot90, flipHoriz, flipVert :: (IsComplex c a) => Pt c -> Pt c
 rot90 = negate . iTimes --(*) (0 :+ (-1))
-flipHoriz (x :+ y) = negate x :+ y
-flipVert  (x :+ y) = x :+ negate y
+flipHoriz z = negate (realPart z) +:+ imagPart z
+flipVert  z = realPart z +:+ negate (imagPart z)
 
-removeRedundantPoints :: [(R, Pt)] -> [(R, Pt)]
+iTimes :: (IsComplex c a) => c -> c
+iTimes z = (-imagPart z) +:+ realPart z
+
+removeRedundantPoints :: (IsComplex c a) => [(R a, Pt c)] -> [(R a, Pt c)]
 removeRedundantPoints ((r0,p0):(r1,p1):(r2,p2):px)
   | p0 == p1         = removeRedundantPoints ((r0,p0):(r2,p2):px)
   | p1 == p2         = removeRedundantPoints ((r0,p0):(r1,p1):px)
@@ -523,12 +512,18 @@ removeRedundantPoints ps = ps
 -- Debugging helpers
 ------------------------------------
 
-_putParamPath :: HasParamPath a => PlotFn -> a -> IO ()
+{- example usage
+> x = ParallelSeg Vert T L P2S
+> pf = sqrt :: PlotFn (N.Complex Double) Double
+> _putParamPath pf x
+-}
+
+_putParamPath :: forall a b c. (PrintfArg a, IsComplex c a, HasParamPath b c a) => PlotFn c a -> b -> IO ()
 _putParamPath plotFn x = do
   putStrLn "       R,    Path,        ,    Plot,        "
   mapM_ putPts $ paramPathPts plotFn p
   where
-  p@(ParamPath _ _ _ _ pathFn _ _) = paramPath x
+  p@(ParamPath _ _ _ _ pathFn _ _) = paramPath x :: ParamPath c a
   putPts (r,plotPt) = printf "%8.4g,%8.4f,%8.4f,%8.4f,%8.4f\n"
                              r
                              (realPart pathPt) (imagPart pathPt)
@@ -542,26 +537,26 @@ _putParamPath plotFn x = do
 -- e.g. lists of points (instead of string containing x,y pairs.
 ------------------------------------
 
-class IsSvg a where
-  toSvg :: a -> Svg
-  trans :: PlotFn -> a -> a
-  pointCount :: a -> Int
+class IsSvg b c a | b -> c, b->a where
+  toSvg :: b -> Svg
+  trans :: PlotFn c a -> b -> b
+  pointCount :: b -> Int
 
-data SVG = forall a. IsSvg a => SVG a
+data SVG c a = forall b. IsSvg b c a => SVG b
 
-instance IsSvg SVG where
+instance RealFloat a => IsSvg (SVG c a) c a where
   toSvg (SVG x) = toSvg x
   trans f (SVG x) = SVG (trans f x)
   pointCount (SVG x) = pointCount x
 
-instance IsSvg [SVG] where
+instance RealFloat a => IsSvg [SVG c a] c a where
   toSvg = foldMap toSvg
   trans f = map (trans f)
   pointCount = sum . map pointCount
 
-data Line = Line PtOpts Pt Pt
+data Line c a = Line PtOpts (Pt c) (Pt c)
 
-instance IsSvg Line where
+instance (IsComplex c a) => IsSvg (Line c a) c a where
   toSvg (Line b s e) = S.line ! SA.x1 (ptX b s)
                               ! SA.y1 (ptY b s)
                               ! SA.x2 (ptX b e)
@@ -569,9 +564,9 @@ instance IsSvg Line where
   trans f (Line b x y) = Line b (f x) (f y)
   pointCount _ = 2
 
-data Path = Path Class Width Colour Dasharray PtOpts [Pt] --open path, smooth curve.
+data Path c a = Path Class Width Colour Dasharray PtOpts [Pt c] --open path, smooth curve.
 
-instance IsSvg Path where
+instance (IsComplex c a) => IsSvg (Path c a) c a where
   toSvg (Path _ _ _ _ _ []) = mempty
   toSvg (Path cl w co d b pts) = S.polyline ! SA.points (ptsVal b pts)
                                             ! SA.class_ cl
@@ -580,8 +575,9 @@ instance IsSvg Path where
                                             ! SA.strokeDasharray d
                                             ! SA.fill "none"
                                             !? (isHorzVert pts, SA.shapeRendering "crispedges")
-    where isHorzVert [x1:+y1,x2:+y2] | x1 == x2 || y1 == y2  =  True
-          isHorzVert _                                       =  False
+    where isHorzVert [z1,z2] | realPart z1 == realPart z2
+                            || imagPart z1 == imagPart z2  =  True
+          isHorzVert _                                     =  False
   trans f (Path cl w co d b pts) = Path cl w co d b $ map f pts
   pointCount (Path _ _ _ _ _ pts) = length pts
 
@@ -590,39 +586,40 @@ type Saturation = Int  --saturation percent 0 = black, 100 = White
 colour :: Saturation -> H.AttributeValue
 colour x = "hsl(0, 1%, " <> toValue x <> "%)"
 
-data Closed = Closed Class Saturation PtOpts [Pt]
+data Closed c a = Closed Class Saturation PtOpts [Pt c]
 
-instance IsSvg Closed where
+instance (IsComplex c a) => IsSvg (Closed c a) c a where
   toSvg (Closed _ _ _ []) = mempty
   toSvg (Closed c col b pts) = S.polygon ! SA.points (ptsVal b pts) ! SA.class_ c ! SA.fill (colour col)
   trans f (Closed c col b pts) = Closed c col b $ map f pts
   pointCount (Closed _ _ _ pts) = length pts
 
-data Group = Group Class [SVG]
+data Group c a = Group Class [SVG c a]
 
-instance IsSvg Group where
+instance (IsComplex c a) => IsSvg (Group c a) c a where
   toSvg (Group c xs) = S.g ! SA.class_ c $ traverse_ toSvg xs
   trans f (Group c xs) = Group c $ map (trans f) xs
   pointCount (Group _ xs) = sum $ map pointCount xs
 
-ptsVal :: PtOpts -> [Pt] -> AttributeValue
+ptsVal :: (IsComplex c a) => PtOpts -> [Pt c] -> AttributeValue
 ptsVal _ [] = undefined
 ptsVal b (p:px) = pt b p <> foldMap ((" " <>) . pt b) px
 
-pt, ptX, ptY :: PtOpts -> Pt -> AttributeValue
+pt, ptX, ptY :: (IsComplex c a) => PtOpts -> Pt c -> AttributeValue
 ptX b = dblVal . bump b . realPart
 ptY b = dblVal . bump b . imagPart
 pt b p = ptX b p <> "," <> ptY b p
 
 data PtOpts = SplitZeros | CentreZeros
 
-bump :: PtOpts -> R -> R
+bump :: RealFloat a => PtOpts -> R a -> a
+bump _           x | not (isIEEE x)   = x
 bump CentreZeros x | abs x < 0.0001   = x
 bump _           x | isNegativeZero x = x - 0.02
                    | x < 0            = x - 0.02
                    | otherwise        = x + 0.02
 
-dblVal :: R -> AttributeValue
+dblVal :: RealFloat a => a -> AttributeValue
 dblVal x = toValue $ showFFloat (Just 3) x ""
 
 ------------------------------------
@@ -631,3 +628,39 @@ dblVal x = toValue $ showFFloat (Just 3) x ""
 
 enumerate :: (Enum a, Bounded a) => [a]
 enumerate = [minBound .. maxBound]
+
+class (Floating c, Eq c, RealFloat a) => IsComplex c a | c -> a where
+  realPart, imagPart :: c -> a
+  (+:+) :: a -> a -> c
+  mkPolar :: a -> a -> c
+  phase :: c -> a
+  sqrt, exp, log, sin, asin, cos, acos, tan, atan, sinh, asinh, cosh, acosh, tanh, atanh  :: c -> c
+  sqrt  = P.sqrt 
+  exp   = P.exp  
+  log   = P.log  
+  sin   = P.sin  
+  asin  = P.asin 
+  cos   = P.cos  
+  acos  = P.acos 
+  tan   = P.tan  
+  atan  = P.atan 
+  sinh  = P.sinh 
+  asinh = P.asinh
+  cosh  = P.cosh 
+  acosh = P.acosh
+  tanh  = P.tanh 
+  atanh = P.atanh
+  
+instance RealFloat a => IsComplex (O.Complex a) a where
+  realPart = O.realPart
+  imagPart = O.imagPart
+  (+:+) = (O.:+)
+  mkPolar = O.mkPolar
+  phase = O.phase
+
+instance RealFloat a => IsComplex (N.Complex a) a where
+  realPart = N.realPart
+  imagPart = N.imagPart
+  (+:+) = (N.:+)
+  mkPolar = N.mkPolar
+  phase = N.phase
