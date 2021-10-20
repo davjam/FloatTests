@@ -72,6 +72,9 @@ bugFixTests = concat
   ,let z = ( 1):+0     in testC False "#4228 #2 atanh"                (show z) (atanh z) (E ( inf))(E 0)
   ,let z = mn:+0       in [Test       "magnitude"                     (show z) (magnitude z)  (E mn)]
   ,let z = 0:+mn       in [Test       "magnitude"                     (show z) (magnitude z)  (E mn)]
+  ,let z1 = (-1531.9375):+0 --For Float, original code gave significantly different results for z1 & z2.
+       z2 = z1 - 0.0001
+                       in [Test       "asin -1531.9375"               (show z1) (imagPart $ asin z1) (A2 2 $ imagPart $ asin z2)]
   ]
 
 sqrtTests ::  forall a. (RealFloat a, Show a) => [Test a]
