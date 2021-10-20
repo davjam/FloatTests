@@ -42,25 +42,35 @@ import Double0
 main :: IO ()
 main = do
   createDirectoryIfMissing False "TrigDiags"
-  writeGraphsDoc @(O.Complex Double) True FullGraph currPlots "TrigDiags\\Curr.html"
-  writeGraphsDoc @(N.Complex Double) True FullGraph currPlots "TrigDiags\\Fixed.html"
-  writeGraphsDoc @(N.Complex Float ) True FullGraph currPlots "TrigDiags\\FloatFixed.html"
-  writeGraphsDoc @(N.Complex D0    ) True FullGraph currPlots "TrigDiags\\D0Fixed.html"
+  writeGraphsDoc @(O.Complex Double) dftlGraphOpts FullGraph plots "Original Complex Graphs"                oldIntro "TrigDiags\\Curr.html"
+  writeGraphsDoc @(N.Complex Double) dftlGraphOpts FullGraph plots "Fixed (Double) Complex Graphs"          dblIntro "TrigDiags\\Fixed.html"
+  writeGraphsDoc @(N.Complex Float ) dftlGraphOpts FullGraph plots "Fixed (Float) Complex Graphs"           fltIntro "TrigDiags\\FloatFixed.html"
+  writeGraphsDoc @(N.Complex D0    ) dftlGraphOpts FullGraph plots "Fixed (Unsigned Double) Complex Graphs" d0Intro  "TrigDiags\\D0Fixed.html"
+
+data GraphOpts = GraphOpts
+  { includeAxes :: Bool,
+    includePtCount :: Bool,
+    includeComments :: Bool
+  }
+  deriving Show
+
+dftlGraphOpts :: GraphOpts
+dftlGraphOpts = GraphOpts True False True
 
 _t1 :: IO ()  --used for testing little bits
-_t1 = writeGraphsDoc @(N.Complex Double) True [AnnulusSectorSeg A3 7 CO] [("id", id), ("acosh", acosh)] "TrigDiags\\Test.html"
+_t1 = writeGraphsDoc @(N.Complex Double) dftlGraphOpts [AnnulusSectorSeg A3 7 CO] [("id", id), ("acosh", acosh)] "Test Complex Graph" mempty "TrigDiags\\Test.html"
 
-writeGraphsDoc :: (IsComplex c a, Graphable b c a) => Bool -> b -> PlotList c a -> FilePath -> IO ()
-writeGraphsDoc includeAxes graphable plotList filePath = trace filePath $
-  writeFile filePath $ renderHtml $ graphsDoc includeAxes graphable plotList
+writeGraphsDoc :: (IsComplex c a, Graphable b c a) => GraphOpts -> b -> PlotList c a -> H.Html -> H.Html -> FilePath -> IO ()
+writeGraphsDoc opts graphable plotList title intro filePath = trace filePath $
+  writeFile filePath $ renderHtml $ graphsDoc opts graphable plotList intro title
 
-graphsDoc :: (IsComplex c a, Graphable b c a) => Bool -> b -> PlotList c a -> H.Html
-graphsDoc includeAxes graphable plotList = H.docTypeHtml ! SA.lang "en" $ do
+graphsDoc :: (IsComplex c a, Graphable b c a) => GraphOpts -> b -> PlotList c a -> H.Html -> H.Html -> H.Html
+graphsDoc opts graphable plotList intro title = H.docTypeHtml ! SA.lang "en" $ do
   H.head $ do
     H.meta ! HA.charset "utf-8"
     H.meta ! HA.name "viewport"
            ! HA.content "width=device-width, initial-scale=1.0, viewport-fit=cover"
-    H.title "Complex Function Graphs"
+    H.title title
 
     --y coords in svg increase from top to bottom, but we want our graphs to work the other way.
     H.style "\n\
@@ -73,8 +83,102 @@ graphsDoc includeAxes graphable plotList = H.docTypeHtml ! SA.lang "en" $ do
     H.script ! HA.src "https://polyfill.io/v3/polyfill.min.js?features=es6" $ ""
     H.script ! HA.id "MathJax-script" ! HA.async "" ! HA.src "https://cdn.jsdelivr.net/npm/mathjax@3.0.1/es5/tex-mml-chtml.js" $ ""
 
-  H.body $
-    traverse_ (uncurry $ graph includeAxes graphable) plotList
+  H.body $ do
+    when (includeComments opts) $ overallComment intro
+    traverse_ (uncurry $ graph opts graphable) plotList
+
+overallComment :: H.Html -> H.Html
+overallComment intro = do
+  H.p $ do
+    "These diagrams illustrate the behaviour of the elementary Floating functions in the complex plane. \
+    \They are based on those in \"Common Lisp The Language Second Addition\" by Guy L. Steele Jr. ("
+    H.input ! HA.type_ "checkbox" ! HA.id "showDescr" ! HA.onclick "document.getElementById(\"descr\").style.display = document.getElementById(\"showDescr\").checked ? \"block\" : \"none\""
+    H.label ! HA.for "showDescr" $ "Show description."
+    ") The code was re-implemented in Haskell (using "
+    H.a ! HA.href "https://github.com/davjam/HaskellNumericsTestsFixes/blob/main/TrigDiags.hs" 
+        ! HA.target "_blank"
+        $ "this"
+    ")."
+    intro
+    H.div ! HA.id "descr"
+          ! HA.style "display: none; border-left: 1px solid; padding-left: 10px;"
+          $ do
+      H.p "Here is Steele's description of the graphs, with some [added commentary based on some modifications]:"
+      H.p $ do
+              "Imagine the complex plane decorated as follows. \
+              \The real and imaginary axes are painted with thick lines. \
+              \[The lines on the axes are coloured, \
+              \with a different colour for the positive and negative half of each axis. \
+              \When negative zeros are supported, two lines are painted on each axis: \
+              \a solid line for positive zero and a thicker dotted line for negative zero, \
+              \and the lines are positioned either side of the axis line.] \
+              \Parallels from the axes on both sides at \
+              \distances of 1, 2 and 3 are painted with thin lines; \
+              \these parallels are doubly infinite lines, as are the axes. \
+              \[The parallels are coloured, with a different colour for each quadrant. \
+              \The horizontal lines are dashed.] \
+              \Four annuli (rings) are painted in gradated shades of grey. \
+              \Ring 1, the inner ring, consists of points whose radial distances \
+              \from the origin lie in the range [1/4, 1/2]; \
+              \ring 2 is in radial range [3/4, 1]; ring 3, in the range ["; piHtml; "/2, 2]; \
+              \and ring 4, in the range [3, "; piHtml; "]. \
+              \Ring \\(j\\) is divided into \\(2^{j+1}\\) equal sectors, \
+              \with each sector painted a different shade of grey, \
+              \darkening as one proceeds counterclockwise from the positive real axis."
+      H.p $ do
+              "We can illustrate the behaviour of a numeric function \\(f\\) by \
+              \considering how it maps the complex plane to itself. \
+              \More specifically, consider each point \\(z\\) of the decorated plane. \
+              \We decorate a new plane by colouring the point \\(f(z)\\) with the \
+              \same colour that point \\(z\\) had in the original decorated plane. \
+              \In other words, the newly decorated plane illustrates how \\(f\\) \
+              \maps the axes, other horizontal and vertical lines, and annuli."
+      H.p $ do
+              "In each figure we will show only a fragment of the complex plane, \
+              \with the real axis horizontal in the usual manner \
+              \(-"; infHtml; " to the left, +"; infHtml; " to the right) and \
+              \the imaginary axis vertical (-"; infHtml; iHtml; " below, +"; infHtml; iHtml; " above). \
+              \Each fragment shows a region containing points whose real and imaginary parts \
+              \are in the range [-4.1, 4.1]. \
+              \The axes of the new plane are shown as very thin [black] lines, \
+              \with large tick marks at integer coordinates and somewhat smaller tick marks \
+              \at multiples of "; piHtml; "/2."
+      H.p $ do
+              "The [first figure] shows the result of plotting the [id] function (quite literally); \
+              \the graph exhibits the decoration of the original plane. \
+              \[The remaining figures illustrate the mappings of the other elementary functions.]"
+  H.p $ do
+    "Different pages show diagrams with: "
+    H.a ! HA.href "Curr.html" $ "original Complex.hs"
+    ", "
+    H.a ! HA.href "Fixed.html" $ "fixed Complex.hs for Double"
+    ", "
+    H.a ! HA.href "FloatFixed.html" $ "fixed Complex.hs for Float"
+    " and "
+    H.a ! HA.href "D0Fixed.html" $ "fixed Complex.hs for a type like Double, but without support for negative zero"
+    "."
+    
+
+infHtml, piHtml, iHtml :: H.Html
+infHtml = H.preEscapedText "&#x221E;"
+piHtml  = H.preEscapedText "&#x03C0;"
+iHtml   = H.preEscapedText "&#x1D456;"
+
+oldIntro, dblIntro, fltIntro, d0Intro :: H.Html
+oldIntro = H.p $ do
+  "This page shows the behaviour of Complex Double with the original Data.Complex implementation as in GHC 8.10.7. \
+  \The graphs illustrate some of the defects, e.g.:"
+  H.ul $ do
+    H.li "Incorrect branch cuts. In sqrt, the negative real axis (dotted orange) is mapped on top of the positive real axis (solid orange), \
+         \leaving an \"open edge\" along the negative imaginary axis. \
+         \The same can be seen in asin (where the positive axis is also impacted), \
+         \atan (where the positive and negative imaginary axes are impacted), and others."
+    H.li "Loss of -0.0. In asin, the section -pi/2 to pi/2 \"wobbles\" between -0.0 and 0.0. \
+         \Other graphs have similar wobbles."
+dblIntro = H.p "This page shows the behaviour of Complex Double with the fixed Complex implementation. Note there are no \"open edges\" or \"wobbles\"."
+fltIntro = H.p "This page shows the behaviour of Complex Float with the fixed Complex implementation. The graphs look the same as for Complex Double."
+d0Intro  = H.p "This page shows the behaviour of Complex D0, where D0 is like Double but doesn't support negative zeros, with the fixed Complex implementation. \
+               \We now have \"open edges\" again (there is little option without negative zero support), but still no \"wobbles\"."
 
 type PlotList c a = [(Title, PlotFn c a)]
 type Title        = String
@@ -82,23 +186,8 @@ type PlotFn c a   = Pt c -> Pt c
 type Pt c         = c
 type R a          = a
 
-{-
-Keep R as Double
-due to weidness with Float where:
-pathPtsX (flipHoriz . (:+ 0)) asin 2 big
-has some kind of "step" change L
-1531.9375
-> asin (-1229 :: Complex Float)
-(-1.5707964) :+ 7.912301
-> asin (-1531.9375 :: Complex Float)
-(-1.5707964) :+ 7.912301
-> asin (-1531.9376 :: Complex Float)
-(-1.5707964) :+ 8.317766
-> asin (-1649 :: Complex Float)
-(-1.5707964) :+ 8.317766
--}
-currPlots :: (IsComplex c a) => PlotList c a
-currPlots =
+plots :: (IsComplex c a) => PlotList c a
+plots =
   [ ("id"                     , id                      )
   , ("sqrt"                   , sqrt                    )
   , ("exp"                    , exp                     )
@@ -112,21 +201,28 @@ currPlots =
   , ("sinh"                   , sinh                    )
   , ("asinh"                  , asinh                   )
   , ("cosh"                   , cosh                    )
-  , ("acosh"                  , acosh                   ) -- nb the lisp book has an extra line (0+0i to 0-1i), that I think should not be there(*).
+  , ("acosh"                  , acosh                   )
   , ("tanh"                   , tanh                    )
   , ("atanh"                  , atanh                   )
   ]
 
-graph :: forall a b c. (IsComplex c a, Graphable b c a) => Bool -> b -> Title -> PlotFn c a -> H.Html
-graph includeAxes graphable title plotFn = trace title $ do
+graphComment :: String -> H.Html
+graphComment "acosh" = H.p "I think the solid line from 0 to -pi/2 i in the CL book is an error. \
+                           \p314: \"A number with real part zero is in the range if its imaginary part \
+                           \is between zero (inclusive) and pi (inclusive).\""
+graphComment _ = mempty
+
+graph :: forall a b c. (IsComplex c a, Graphable b c a) => GraphOpts -> b -> Title -> PlotFn c a -> H.Html
+graph opts graphable title plotFn = trace title $ do
   H.h1 $ H.toHtml title
   S.svg ! SA.width "800" ! SA.height "800"
-        ! SA.viewbox "-4.2 -4.2 8.4 8.4"
+        ! SA.viewbox "-4.1 -4.1 8.2 8.2"
         ! SA.class_ "coords"
         $ do
     toSvg fullGraph
-    when includeAxes $ S.g ! SA.class_ "axes" $ traverse_ toSvg  axes --axes last, so they appear on top.
-  H.p $ do "("; H.toHtml $ pointCount fullGraph; " pts)"
+    when (includeAxes opts) $ S.g ! SA.class_ "axes" $ traverse_ toSvg  axes --axes last, so they appear on top.
+    when (includePtCount opts) $ H.p $ do "("; H.toHtml $ pointCount fullGraph; " pts)"
+    when (includeComments opts) $ graphComment title
   H.hr
   where
     fullGraph = graphSvg plotFn graphable :: SVG c a
@@ -134,7 +230,7 @@ graph includeAxes graphable title plotFn = trace title $ do
     axes :: [SVG c a]
     axes = xAxis ++ yAxis
       where
-        xAxis = SVG (Line CentreZeros (negate 4.2 +:+ 0) (4.2 +:+ 0))
+        xAxis = SVG (Line CentreZeros (negate 4.1 +:+ 0) (4.1 +:+ 0))
               :  map (tick True)  [-4,-3,-2,-1,1,2,3,4]
               ++ map (tick False) [-pi,-pi/2,pi/2,pi]
         yAxis = map (trans rot90) xAxis
