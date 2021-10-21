@@ -3,15 +3,15 @@
 {-# LANGUAGE ExplicitForAll, TypeApplications, ScopedTypeVariables #-}
 
 --NB This now tests quite a lot of different values. It's a bit slow unless compiled.
+--But you can do e.g.
+--putFails "" (gnumericTests @Double)
 
-import MyComplex -- import this to test new implementation
---import Data.Complex  -- import this instead to show errors in old implementation.
-                       -- (regression tests will work pretty well, except where I've given overrides).
-
-import HasVal
-import Double0
-import qualified Data.Complex as C
+import MyComplex
+import qualified OldComplex as O
 import qualified MyFloat as F
+import Double0
+import HasVal
+
 import Data.Char
 import Data.Maybe
 
@@ -212,14 +212,14 @@ gnumericTests = concatMap testFn allFunctions where
 
 regressionTests :: (RealFloat a, HasVal a, Show a) => (a -> Expected a) -> [Test a]
 regressionTests match = concat $
-  [ testC False (fnName fn) (show z) (fnF fn z) (match $ C.realPart fnCz) (match $ C.imagPart fnCz)
+  [ testC False (fnName fn) (show z) (fnF fn z) (match $ O.realPart fnCz) (match $ O.imagPart fnCz)
   | fn <- allFunctions
   , fn /= Sq
   , x <- xs
   , y <- xs
   , let z = x :+ y
   , not (expectedRegression fn z)
-  , let zC = x C.:+ y
+  , let zC = x O.:+ y
         fnCz = fromMaybe (fnC fn zC) $ override fn zC
   ]
 
@@ -269,7 +269,7 @@ square (w:+n) | isNaN x = if | isInfinite y -> F.copySign 0 w :+ y
     y = wn+wn
     wn = w*n
 
-fnC :: RealFloat a => Function -> C.Complex a -> C.Complex a
+fnC :: RealFloat a => Function -> O.Complex a -> O.Complex a
 fnC Sq    = \z->z*z
 fnC Sqrt  = sqrt
 fnC Exp   = exp
@@ -454,37 +454,37 @@ isBad x | isInfinite x = True
         | otherwise    = False
 isGood = not . isBad
 
-override :: RealFloat a => Function -> C.Complex a -> Maybe (C.Complex a)
+override :: RealFloat a => Function -> O.Complex a -> Maybe (O.Complex a)
 --Where the current functions don't fail with Infs/NaNs, but just return innacurate results.
 --All values from WA - except where noted.
-override Asin  ((-1.0) C.:+ (-6.2138610988780994e-21))  = Just $ (-1.57079632671606857156503670)     C.:+ (-7.88280476662849959740264749e-11)
-override Asin  ((-1.0) C.:+   6.2138610988780994e-21 )  = Just $ (-1.57079632671606857156503670)     C.:+ ( 7.88280476662849959740264749e-11)
-override Asin  (( 1.0) C.:+ (-6.2138610988780994e-21))  = Just $ ( 1.57079632671606857156503670)     C.:+ (-7.88280476662849959740264749e-11)
-override Asin  (( 1.0) C.:+   6.2138610988780994e-21 )  = Just $ ( 1.57079632671606857156503670)     C.:+ ( 7.88280476662849959740264749e-11)
-override Acos  ((-1.0) C.:+ (-6.2138610988780994e-21))  = Just $   3.14159265351096519079635839      C.:+   7.88280476662849959740264749e-11
-override Acos  ((-1.0) C.:+ ( 6.2138610988780994e-21))  = Just $   3.14159265351096519079635839      C.:+ (-7.88280476662849959740264749e-11)
-override Acos  (( 1.0) C.:+ ( 6.2138610988780994e-21))  = Just $   7.8828047666284996e-11            C.:+ (-7.8828047666284996e-11)
-override Acos  (( 1.0) C.:+ (-6.2138610988780994e-21))  = Just $   7.8828047666284996e-11            C.:+ ( 7.8828047666284996e-11)
-override Asinh ((-6.2138610988780994e-21) C.:+ (-1.0))  = Just $ (-7.88280476662849959740264749e-11) C.:+ (-1.57079632671606857156503670)
-override Asinh ((-6.2138610988780994e-21) C.:+ ( 1.0))  = Just $ (-7.88280476662849959740264749e-11) C.:+ ( 1.57079632671606857156503670)
-override Asinh (( 6.2138610988780994e-21) C.:+ ( 1.0))  = Just $ ( 7.88280476662849959740264749e-11) C.:+ ( 1.57079632671606857156503670)
-override Asinh (( 6.2138610988780994e-21) C.:+ (-1.0))  = Just $ ( 7.88280476662849959740264749e-11) C.:+ (-1.57079632671606857156503670)
-override Acosh ((-1.0) C.:+ (-6.2138610988780994e-21))  = Just $   7.88280476662849959740264749e-11  C.:+ (-3.14159265351096519079635839)
-override Acosh ((-1.0) C.:+ ( 6.2138610988780994e-21))  = Just $   7.88280476662849959740264749e-11  C.:+ ( 3.14159265351096519079635839)
-override Acosh (( 1.0) C.:+ (-6.2138610988780994e-21))  = Just $   7.8828047666284996e-11            C.:+ (-7.8828047666284996e-11)
-override Acosh (( 1.0) C.:+ ( 6.2138610988780994e-21))  = Just $   7.8828047666284996e-11            C.:+   7.8828047666284996e-11
+override Asin  ((-1.0) O.:+ (-6.2138610988780994e-21))  = Just $ (-1.57079632671606857156503670)     O.:+ (-7.88280476662849959740264749e-11)
+override Asin  ((-1.0) O.:+   6.2138610988780994e-21 )  = Just $ (-1.57079632671606857156503670)     O.:+ ( 7.88280476662849959740264749e-11)
+override Asin  (( 1.0) O.:+ (-6.2138610988780994e-21))  = Just $ ( 1.57079632671606857156503670)     O.:+ (-7.88280476662849959740264749e-11)
+override Asin  (( 1.0) O.:+   6.2138610988780994e-21 )  = Just $ ( 1.57079632671606857156503670)     O.:+ ( 7.88280476662849959740264749e-11)
+override Acos  ((-1.0) O.:+ (-6.2138610988780994e-21))  = Just $   3.14159265351096519079635839      O.:+   7.88280476662849959740264749e-11
+override Acos  ((-1.0) O.:+ ( 6.2138610988780994e-21))  = Just $   3.14159265351096519079635839      O.:+ (-7.88280476662849959740264749e-11)
+override Acos  (( 1.0) O.:+ ( 6.2138610988780994e-21))  = Just $   7.8828047666284996e-11            O.:+ (-7.8828047666284996e-11)
+override Acos  (( 1.0) O.:+ (-6.2138610988780994e-21))  = Just $   7.8828047666284996e-11            O.:+ ( 7.8828047666284996e-11)
+override Asinh ((-6.2138610988780994e-21) O.:+ (-1.0))  = Just $ (-7.88280476662849959740264749e-11) O.:+ (-1.57079632671606857156503670)
+override Asinh ((-6.2138610988780994e-21) O.:+ ( 1.0))  = Just $ (-7.88280476662849959740264749e-11) O.:+ ( 1.57079632671606857156503670)
+override Asinh (( 6.2138610988780994e-21) O.:+ ( 1.0))  = Just $ ( 7.88280476662849959740264749e-11) O.:+ ( 1.57079632671606857156503670)
+override Asinh (( 6.2138610988780994e-21) O.:+ (-1.0))  = Just $ ( 7.88280476662849959740264749e-11) O.:+ (-1.57079632671606857156503670)
+override Acosh ((-1.0) O.:+ (-6.2138610988780994e-21))  = Just $   7.88280476662849959740264749e-11  O.:+ (-3.14159265351096519079635839)
+override Acosh ((-1.0) O.:+ ( 6.2138610988780994e-21))  = Just $   7.88280476662849959740264749e-11  O.:+ ( 3.14159265351096519079635839)
+override Acosh (( 1.0) O.:+ (-6.2138610988780994e-21))  = Just $   7.8828047666284996e-11            O.:+ (-7.8828047666284996e-11)
+override Acosh (( 1.0) O.:+ ( 6.2138610988780994e-21))  = Just $   7.8828047666284996e-11            O.:+   7.8828047666284996e-11
 
 --For these, I think the old atanh was wrong.
 --I also think WA IS WRONG! (WA seems to think these are on the branch cut and goes in wrong direction. It gets e.g. 5.0e-19 right).
-override Atanh z@(x C.:+ ( 5.0e-324))  | x > 2 && x < 4 = Just $   x' C.:+ ( 1.570796326794897)
-  where x' C.:+ _ = atanh z
-override Atanh z@(x C.:+ (-5.0e-324))  | x > 2 && x < 4 = Just $   x' C.:+ (-1.570796326794897)
-  where x' C.:+ _ = atanh z
+override Atanh z@(x O.:+ ( 5.0e-324))  | x > 2 && x < 4 = Just $   x' O.:+ ( 1.570796326794897)
+  where x' O.:+ _ = atanh z
+override Atanh z@(x O.:+ (-5.0e-324))  | x > 2 && x < 4 = Just $   x' O.:+ (-1.570796326794897)
+  where x' O.:+ _ = atanh z
 --these match Float values:
-override Atanh z@(x C.:+ ( 1.0e-45))  | x > 2 && x < 4 = Just $   x' C.:+ ( 1.5707964)
-  where x' C.:+ _ = atanh z
-override Atanh z@(x C.:+ (-1.0e-45))  | x > 2 && x < 4 = Just $   x' C.:+ (-1.5707964)
-  where x' C.:+ _ = atanh z
+override Atanh z@(x O.:+ ( 1.0e-45))  | x > 2 && x < 4 = Just $   x' O.:+ ( 1.5707964)
+  where x' O.:+ _ = atanh z
+override Atanh z@(x O.:+ (-1.0e-45))  | x > 2 && x < 4 = Just $   x' O.:+ (-1.5707964)
+  where x' O.:+ _ = atanh z
 
 override _ z = Nothing
 
