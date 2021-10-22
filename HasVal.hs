@@ -13,6 +13,8 @@ data Expected a = E a    --exactly
                 | B a    --like A, but if 0, -0, Inf, -Inf, NaN checked exactly (including sign)
                 | A2 Int a  --like A, but to less precision.
                 | R      --any real (not Inf, not NaN)
+                | P      -- real and positive (not zero)
+                | N      -- real and negative (not zero)
                 | NNaN   --not NaN
                 | Z      --exactly zero, but either + or -.
                 | SI a   --small increment above
@@ -36,6 +38,12 @@ hasFltVal :: RealFloat a => Int -> a -> Expected a -> Bool
 hasFltVal _   x R     | isNaN x          = False
                       | isInfinite x     = False
                       | otherwise        = True
+hasFltVal _   x P     | isNaN x          = False
+                      | isInfinite x     = False
+                      | otherwise        = x > 0
+hasFltVal _   x N     | isNaN x          = False
+                      | isInfinite x     = False
+                      | otherwise        = x < 0
 hasFltVal _   x NNaN  | isNaN x          = False
                       | otherwise        = True
 hasFltVal _   x (E y) | isNaN y          = isNaN x

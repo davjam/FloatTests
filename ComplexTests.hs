@@ -58,27 +58,57 @@ main = do
   
   putFails "Double vs Float"  doubleVsFloatTests
 
-bugFixTests :: (RealFloat a, Show a) => [Test a]
+bugFixTests :: forall a. (RealFloat a, Show a) => [Test a]
 bugFixTests = concat
-  [
-   let z = (-4):+0     in testC False "#20425 #1 sqrt"                (show z) (sqrt z)  (E 0)     (E 2)
-  ,let z = (-4):+(-0)  in testC True  "#20425 #2 sqrt"                (show z) (sqrt z)  (E 0)     (E (-2))
-  ,let z = mx:+mx      in testC False "#20425 #3 sqrt"                (show z) (sqrt z)  R         R     --extremeSqrtTests has more precise test
-  ,let z = mx:+mx      in testC False "extreme log"                   (show z) (log z)   R         R
+  [--tests for historic fixes
+   let z = (-1):+0     in testC False "#4228 #1 atanh"                (show z) (atanh z) (E (-inf))(E 0)
+  ,let z = ( 1):+0     in testC False "#4228 #2 atanh"                (show z) (atanh z) (E ( inf))(E 0)
   ,let z = (-1):+0     in testC False "#8532 #1 acosh"                (show z) (acosh z) (E 0)     (E pi)
   ,let z = (-1):+(-0)  in testC False "#8532 #2 acosh"                (show z) (acosh z) (E 0)     (E $ if isIEEE (realPart z) then -pi else pi)
-  ,let z = 1e-20:+0    in testC False "atan email #1 atan"            (show z) (atan  z) (E 1e-20) (E 0)
-  ,let z = 0:+1e-20    in testC False "atan email #2 atan"            (show z) (atan  z) (E 0)     (E 1e-20)
-  ,let z = 0:+0        in testC False "log"                           (show z) (log   z) (E (-inf))(E 0)
-  ,let z = 0:+(-0)     in testC False "log"                           (show z) (log   z) (E (-inf))(E (-0))
   ,let z = 0:+0        in testC False "#8539 #1 (**2)"                (show z) (z**2   ) (E 0)     (E 0) --MORE NEEDED FOR 8539? (Though I've not changed **)
-  ,let z = (-1):+0     in testC False "#4228 #1 atanh"                (show z) (atanh z) (E (-inf))(E 0)
-  ,let z = ( 1):+0     in testC False "#4228 #2 atanh"                (show z) (atanh z) (E ( inf))(E 0)
+
+  --Complex->Float fixes
   ,let z = mn:+0       in [Test       "magnitude"                     (show z) (magnitude z)  (E mn)]
   ,let z = 0:+mn       in [Test       "magnitude"                     (show z) (magnitude z)  (E mn)]
+  ,let z = (-0):+0     in [Test       "phase"                         (show z) (phase z)      (E $ if isIEEE (undefined :: a) then  pi else 0)]
+  ,let z = (-0):+(-0)  in [Test       "phase"                         (show z) (phase z)      (E $ if isIEEE (undefined :: a) then -pi else 0)]
+                          
+  --Complex->Complex fixes (in order listed in https://gitlab.haskell.org/ghc/ghc/-/issues/20425)
+  --neg zero
+  , testC' False "11" Log   (  0  :+  0  ) (E (-inf))        (E   0 )
+  , testC' False "11" Log   (  0  :+(-0) ) (E (-inf))        (E (-0))
+  , testC' False "12" Tan   (  0  :+  3  ) (E   0   )         R
+  , testC' False "12" Tan   ((-0) :+  3  ) (E (-0  ))         R
+  , testC' False "13" Tanh  (  3  :+  0  )  R                (E   0 )
+  , testC' False "13" Tanh  (  3  :+(-0) )  R                (E (-0))
+  , testC' False "14" Acosh (  3  :+  0  )  R                (E   0 )
+  , testC' False "14" Acosh (  3  :+(-0) )  R                (E (-0))
+  , testC' False "15" Sqrt  ( mx  :+ mx  )  R                 R
+  , testC' False "16" Log   ( mx  :+ mx  )  R                 R
+  , testC' False "17" Tan   ( 0   :+ 800 ) (E 0)             (E 1)
+  , testC' False "18" Tanh  (800  :+ 0   ) (E 1)             (E 0)
+  , testC' False "19" Asin  (mx   :+ mx  )  R                 R         --covers 19 & 20
+  , testC' False "21" Acos  (mx   :+ mx  )  R                 R
+  , testC' False "22" Acosh (mx   :+ mx  )  R                 R
+  , testC' False "23" Sqrt  ((-4) :+  0  ) (E  0 )           (E 2)
+  , testC' True  "23" Sqrt  ((-4) :+(-0) ) (E  0 )           (E (-2))
+  , testC' False "24" Asin  ((-2) :+  0  )  N                 P
+  , testC' True  "24" Asin  ((-2) :+(-0) )  N                 N
+  , testC' True  "25" Acos  (  3  :+  0  ) (E 0)              N
+  , testC' False "25" Acos  (  3  :+(-0) ) (E 0)              P
+  , testC' False "26" Atan  (  0  :+  3  )  P                 P
+  , testC' True  "26" Atan  ((-0) :+  3  )  N                 P
+  , testC' False "27" Asinh (  0  :+  3  )  P                 P
+  , testC' True  "27" Asinh ((-0) :+  3  )  N                 P
+  , testC' True  "28" Atanh (  3  :+  0  )  P                 P
+  , testC' False "28" Atanh (  3  :+(-0) )  P                 N
+  , testC' False "29" Atan  (  0  :+1e-20) (E 0)             (E 1e-20)
+  , testC' False "29" Atan  (1e-20:+0    ) (E 1e-20)         (E 0)
+  , testC' False "30" Tan   (pi/2 :+0    ) (A $ tan (pi/2))  (E 0)
+
   ,let z1 = (-1531.9375):+0 --For Float, original code gave significantly different results for z1 & z2.
        z2 = z1 - 0.0001
-                       in [Test       "asin -1531.9375"               (show z1) (imagPart $ asin z1) (A2 2 $ imagPart $ asin z2)]
+                       in [Test       "31: asin" (show z1) (imagPart $ asin z1) (A2 2 $ imagPart $ asin z2)]
   ]
 
 sqrtTests ::  forall a. (RealFloat a, Show a) => [Test a]
@@ -568,6 +598,10 @@ mn = encodeFloat 1 n where
 ------------------------------------
 -- internal functions
 ------------------------------------
+
+--a more compact version for many situations
+testC' :: (RealFloat a, Show a) => Bool -> String -> Function -> Complex a -> Expected a -> Expected a -> [Test a]
+testC' fIEEEOnly label f z rExp iExp = testC fIEEEOnly (label ++ ": " ++ fnName f) (show z) (fnF f z) rExp iExp
 
 --create a list of two tests, one for the realPart and one for the imagPart.
 testC :: RealFloat a => Bool -> String -> String -> Complex a -> Expected a -> Expected a -> [Test a]
