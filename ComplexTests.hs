@@ -61,17 +61,19 @@ main = do
 bugFixTests :: forall a. (RealFloat a, Show a) => [Test a]
 bugFixTests = concat
   [--tests for historic fixes
-   let z = (-1):+0     in testC "#4228 #1 atanh"                (show z) (atanh z) (E (-inf))(E 0)  Nothing
-  ,let z = ( 1):+0     in testC "#4228 #2 atanh"                (show z) (atanh z) (E ( inf))(E 0)  Nothing
-  ,let z = (-1):+0     in testC "#8532 #1 acosh"                (show z) (acosh z) (E 0)     (E pi) Nothing
-  ,let z = (-1):+(-0)  in testC "#8532 #2 acosh"                (show z) (acosh z) (E 0)     (E $ if isIEEE (realPart z) then -pi else pi) Nothing
-  ,let z = 0:+0        in testC "#8539 #1 (**2)"                (show z) (z**2   ) (E 0)     (E 0) Nothing --MORE NEEDED FOR 8539? (Though I've not changed **)
+    testC' "#4228" Atanh  ((-1):+0   )  (E (-inf)) (E   0  ) Nothing
+  , testC' "#4228" Atanh  (( 1):+0   )  (E ( inf)) (E   0  ) Nothing
+  , testC' "#8532" Acosh  ((-1):+0   )  (E 0)      (E   pi ) Nothing
+  , testC' "#8532" Acosh  ((-1):+(-0))  (E 0)      (E (-pi)) (Just (E 0, E pi))
+  ,let z = 0:+0 in testC "#8539 #1 (**2)"  (show z) (z**2   ) (E 0) (E 0) Nothing --MORE NEEDED FOR 8539? (Though I've not changed **)
+  
+  
 
   --Complex->Float fixes
-  ,let z = mn:+0       in [Test "magnitude"                     (show z) (magnitude z)  (E mn)]
-  ,let z = 0:+mn       in [Test "magnitude"                     (show z) (magnitude z)  (E mn)]
-  ,let z = (-0):+0     in [Test "phase"                         (show z) (phase z)      (E $ if isIEEE (undefined :: a) then  pi else 0)] 
-  ,let z = (-0):+(-0)  in [Test "phase"                         (show z) (phase z)      (E $ if isIEEE (undefined :: a) then -pi else 0)]
+  ,let z = mn:+0       in [Test "magnitude" (show z) (magnitude z)  (E mn)]
+  ,let z = 0:+mn       in [Test "magnitude" (show z) (magnitude z)  (E mn)]
+  ,let z = (-0):+0     in [Test "phase"     (show z) (phase z)      (E $ if isIEEE (undefined :: a) then  pi else 0)] 
+  ,let z = (-0):+(-0)  in [Test "phase"     (show z) (phase z)      (E $ if isIEEE (undefined :: a) then -pi else 0)]
                           
   --Complex->Complex fixes (in order listed in https://gitlab.haskell.org/ghc/ghc/-/issues/20425)
   --neg zero
@@ -113,22 +115,22 @@ bugFixTests = concat
 
 sqrtTests ::  forall a. (RealFloat a, Show a) => [Test a]
 sqrtTests = concat $  --all based on the expectations listed in Kahan's CSQRT function.
-     [ testC "sqrt #1  sqrt " (show z) (sqrt z) (E 0)   (E $  abs (sqrt x))
-                                                                      Nothing | x <- xs, x >= 0, let z = (-x)  :+   0   ] 
-  ++ [ testC "sqrt #2  sqrt " (show z) (sqrt z) (E 0)   (E $ -abs (sqrt x))
-                                          (Just (E 0,    E $  abs (sqrt x)))
-                                                                              | x <- xs, x >= 0, let z = (-x)  :+ (-0  )]
-  ++ [ testC "sqrt #3  sqrt " (show z) (sqrt z) (E inf) (E   inf )    Nothing | x <- xs ++ bads, let z =   x   :+ ( inf)]
-  ++ [ testC "sqrt #4  sqrt " (show z) (sqrt z) (E inf) (E (-inf))    Nothing | x <- xs ++ bads, let z =   x   :+ (-inf)]
-  ++ [ testC "sqrt #5  sqrt " (show z) (sqrt z) (E nan) (E nan)       Nothing | x <- xs        , let z = nan   :+ x     ]
-  ++ [ testC "sqrt #6  sqrt " (show z) (sqrt z) (E nan) (E nan)       Nothing | x <- xs        , let z = x     :+ nan   ]
-  ++ [ testC "sqrt #7  sqrt " (show z) (sqrt z) (E nan) (E nan)       Nothing |                  let z = nan   :+ nan   ]
-  ++ [ testC "sqrt #8  sqrt " (show z) (sqrt z) (E inf) (E (sign0 x)) Nothing | x <- xs        , let z = inf   :+ x     ]
-  ++ [ testC "sqrt #9  sqrt " (show z) (sqrt z) (E inf) (E nan)       Nothing |                  let z = inf   :+ nan   ]
-  ++ [ testC "sqrt #10 sqrt " (show z) (sqrt z) (E inf) (E nan)       Nothing |                  let z = inf   :+ (-nan)]
-  ++ [ testC "sqrt #11 sqrt " (show z) (sqrt z) (E 0)   (E (signI x)) Nothing | x <- xs        , let z = (-inf):+ x     ]
-  ++ [ testC "sqrt #12 sqrt " (show z) (sqrt z) (E nan) (E inf)       Nothing |                  let z = (-inf):+ nan   ]
-  ++ [ testC "sqrt #13 sqrt " (show z) (sqrt z) (E nan) (E inf)       Nothing |                  let z = (-inf):+ (-nan)] --suspect +/- in expected result is typo in Kahan. 
+     [ testC' "#1 " Sqrt z (E 0)   (E $  abs (sqrt x))
+                                                 Nothing | x <- xs, x >= 0, let z = (-x)  :+   0   ] 
+  ++ [ testC' "#2 " Sqrt z (E 0)   (E $ -abs (sqrt x))
+                     (Just (E 0,    E $  abs (sqrt x)))
+                                                         | x <- xs, x >= 0, let z = (-x)  :+ (-0  )]
+  ++ [ testC' "#3 " Sqrt z (E inf) (E   inf )    Nothing | x <- xs ++ bads, let z =   x   :+ ( inf)]
+  ++ [ testC' "#4 " Sqrt z (E inf) (E (-inf))    Nothing | x <- xs ++ bads, let z =   x   :+ (-inf)]
+  ++ [ testC' "#5 " Sqrt z (E nan) (E nan)       Nothing | x <- xs        , let z = nan   :+ x     ]
+  ++ [ testC' "#6 " Sqrt z (E nan) (E nan)       Nothing | x <- xs        , let z = x     :+ nan   ]
+  ++ [ testC' "#7 " Sqrt z (E nan) (E nan)       Nothing |                  let z = nan   :+ nan   ]
+  ++ [ testC' "#8 " Sqrt z (E inf) (E (sign0 x)) Nothing | x <- xs        , let z = inf   :+ x     ]
+  ++ [ testC' "#9 " Sqrt z (E inf) (E nan)       Nothing |                  let z = inf   :+ nan   ]
+  ++ [ testC' "#10" Sqrt z (E inf) (E nan)       Nothing |                  let z = inf   :+ (-nan)]
+  ++ [ testC' "#11" Sqrt z (E 0)   (E (signI x)) Nothing | x <- xs        , let z = (-inf):+ x     ]
+  ++ [ testC' "#12" Sqrt z (E nan) (E inf)       Nothing |                  let z = (-inf):+ nan   ]
+  ++ [ testC' "#13" Sqrt z (E nan) (E inf)       Nothing |                  let z = (-inf):+ (-nan)] --suspect +/- in expected result is typo in Kahan. 
 
 extremeSqrtTests :: [Test Double]
 extremeSqrtTests = concat $
@@ -175,7 +177,7 @@ realCpxMatchTests = concat
 
 nonNaNTests :: forall a. (RealFloat a, Show a) => [Test a]
 nonNaNTests = concat
-  [ testC (fnName fn) (show z) (fnF fn z) (oob Real) (oob Imag) Nothing
+  [ testC' "" fn z (oob Real) (oob Imag) Nothing
   | fn <- allFunctions
   , x <- extremes
   , y <- extremes
@@ -249,7 +251,7 @@ gnumericTests = concatMap testFn allFunctions where
 
 regressionTests :: (RealFloat a, HasVal a, Show a) => (a -> Expected a) -> [Test a]
 regressionTests match = concat $
-  [ testC (fnName fn) (show z) (fnF fn z) (match $ O.realPart fnCz) (match $ O.imagPart fnCz) Nothing
+  [ testC' "" fn z (match $ O.realPart fnCz) (match $ O.imagPart fnCz) Nothing
   | fn <- allFunctions
   , fn /= Sq
   , x <- xs
