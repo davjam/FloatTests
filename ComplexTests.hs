@@ -61,11 +61,11 @@ main = do
 bugFixTests :: forall a. (RealFloat a, Show a) => [Test a]
 bugFixTests = concat
   [--tests for historic fixes
-    testC' "#4228" Atanh  ((-1):+0   )  (E (-inf)) (E   0  ) Nothing
-  , testC' "#4228" Atanh  (( 1):+0   )  (E ( inf)) (E   0  ) Nothing
-  , testC' "#8532" Acosh  ((-1):+0   )  (E 0)      (E   pi ) Nothing
-  , testC' "#8532" Acosh  ((-1):+(-0))  (E 0)      (E (-pi)) (Just (E 0, E pi))
-  ,let z = 0:+0 in testC "#8539 #1 (**2)"  (show z) (z**2   ) (E 0) (E 0) Nothing --MORE NEEDED FOR 8539? (Though I've not changed **)
+    testC' "#4228" Atanh  ((-1):+0   )  (E (-inf), E   0  ) Nothing
+  , testC' "#4228" Atanh  (( 1):+0   )  (E ( inf), E   0  ) Nothing
+  , testC' "#8532" Acosh  ((-1):+0   )  (E 0     , E   pi ) Nothing
+  , testC' "#8532" Acosh  ((-1):+(-0))  (E 0     , E (-pi)) (Just (E 0, E pi))
+  ,let z = 0:+0 in testC "#8539 #1 (**2)"  (show z) (z**2   ) (E 0, E 0) Nothing --MORE NEEDED FOR 8539? (Though I've not changed **)
   
   
 
@@ -77,36 +77,36 @@ bugFixTests = concat
                           
   --Complex->Complex fixes (in order listed in https://gitlab.haskell.org/ghc/ghc/-/issues/20425)
   --neg zero
-  , testC' "11" Log   (  0  :+  0  ) (E (-inf))        (E   0 )  Nothing
-  , testC' "11" Log   (  0  :+(-0) ) (E (-inf))        (E (-0))  Nothing
-  , testC' "12" Tan   (  0  :+  3  ) (E   0   )         R        Nothing
-  , testC' "12" Tan   ((-0) :+  3  ) (E (-0  ))         R        Nothing
-  , testC' "13" Tanh  (  3  :+  0  )  R                (E   0 )  Nothing
-  , testC' "13" Tanh  (  3  :+(-0) )  R                (E (-0))  Nothing
-  , testC' "14" Acosh (  3  :+  0  )  R                (E   0 )  Nothing
-  , testC' "14" Acosh (  3  :+(-0) )  R                (E (-0))  Nothing
-  , testC' "15" Sqrt  ( mx  :+ mx  )  R                 R        Nothing
-  , testC' "16" Log   ( mx  :+ mx  )  R                 R        Nothing
-  , testC' "17" Tan   ( 0   :+ 800 ) (E 0)             (E 1)     Nothing
-  , testC' "18" Tanh  (800  :+ 0   ) (E 1)             (E 0)     Nothing
-  , testC' "19" Asin  (mx   :+ mx  )  R                 R        Nothing  --covers 19 & 20
-  , testC' "21" Acos  (mx   :+ mx  )  R                 R        Nothing
-  , testC' "22" Acosh (mx   :+ mx  )  R                 R        Nothing
-  , testC' "23" Sqrt  ((-4) :+  0  ) (E  0 )           (E 2)     Nothing
-  , testC' "23" Sqrt  ((-4) :+(-0) ) (E  0 )           (E (-2))  (Just (E 0, E 2))
-  , testC' "24" Asin  ((-2) :+  0  )  N                 P        Nothing
-  , testC' "24" Asin  ((-2) :+(-0) )  N                 N        (Just (N, P))
-  , testC' "25" Acos  (  3  :+  0  ) (E 0)              N        (Just (E 0, P))
-  , testC' "25" Acos  (  3  :+(-0) ) (E 0)              P        Nothing
-  , testC' "26" Atan  (  0  :+  3  )  P                 P        Nothing
-  , testC' "26" Atan  ((-0) :+  3  )  N                 P        (Just (P, P))
-  , testC' "27" Asinh (  0  :+  3  )  P                 P        Nothing
-  , testC' "27" Asinh ((-0) :+  3  )  N                 P        (Just (P, P))
-  , testC' "28" Atanh (  3  :+  0  )  P                 P        (Just (P, N))
-  , testC' "28" Atanh (  3  :+(-0) )  P                 N        Nothing
-  , testC' "29" Atan  (  0  :+1e-20) (E 0)             (E 1e-20) Nothing
-  , testC' "29" Atan  (1e-20:+0    ) (E 1e-20)         (E 0)     Nothing
-  , testC' "30" Tan   (pi/2 :+0    ) (A $ tan (pi/2))  (E 0)     Nothing
+  , testC' "11" Log   (  0  :+  0  ) (E (-inf)      , E   0  ) Nothing
+  , testC' "11" Log   (  0  :+(-0) ) (E (-inf)      , E (-0) ) Nothing
+  , testC' "12" Tan   (  0  :+  3  ) (E   0         , R      ) Nothing
+  , testC' "12" Tan   ((-0) :+  3  ) (E (-0  )      , R      ) Nothing
+  , testC' "13" Tanh  (  3  :+  0  ) (R             , E   0  ) Nothing
+  , testC' "13" Tanh  (  3  :+(-0) ) (R             , E (-0) ) Nothing
+  , testC' "14" Acosh (  3  :+  0  ) (R             , E   0  ) Nothing
+  , testC' "14" Acosh (  3  :+(-0) ) (R             , E (-0) ) Nothing
+  , testC' "15" Sqrt  ( mx  :+ mx  ) (R             , R      ) Nothing
+  , testC' "16" Log   ( mx  :+ mx  ) (R             , R      ) Nothing
+  , testC' "17" Tan   ( 0   :+ 800 ) (E 0           , E 1    ) Nothing
+  , testC' "18" Tanh  (800  :+ 0   ) (E 1           , E 0    ) Nothing
+  , testC' "19" Asin  (mx   :+ mx  ) (R             , R      ) Nothing  --covers 19 & 20
+  , testC' "21" Acos  (mx   :+ mx  ) (R             , R      ) Nothing
+  , testC' "22" Acosh (mx   :+ mx  ) (R             , R      ) Nothing
+  , testC' "23" Sqrt  ((-4) :+  0  ) (E  0          , E 2    ) Nothing
+  , testC' "23" Sqrt  ((-4) :+(-0) ) (E  0          , E (-2) ) (Just (E 0, E 2))
+  , testC' "24" Asin  ((-2) :+  0  ) (N             , P      ) Nothing
+  , testC' "24" Asin  ((-2) :+(-0) ) (N             , N      ) (Just (N, P))
+  , testC' "25" Acos  (  3  :+  0  ) (E 0           , N      ) (Just (E 0, P))
+  , testC' "25" Acos  (  3  :+(-0) ) (E 0           , P      ) Nothing
+  , testC' "26" Atan  (  0  :+  3  ) (P             , P      ) Nothing
+  , testC' "26" Atan  ((-0) :+  3  ) (N             , P      ) (Just (P, P))
+  , testC' "27" Asinh (  0  :+  3  ) (P             , P      ) Nothing
+  , testC' "27" Asinh ((-0) :+  3  ) (N             , P      ) (Just (P, P))
+  , testC' "28" Atanh (  3  :+  0  ) (P             , P      ) (Just (P, N))
+  , testC' "28" Atanh (  3  :+(-0) ) (P             , N      ) Nothing
+  , testC' "29" Atan  (  0  :+1e-20) (E 0           , E 1e-20) Nothing
+  , testC' "29" Atan  (1e-20:+0    ) (E 1e-20       , E 0    ) Nothing
+  , testC' "30" Tan   (pi/2 :+0    ) (A $ tan (pi/2), E 0    ) Nothing
 
   ,let z1 = (-1531.9375):+0 --For Float, original code gave significantly different results for z1 & z2.
        z2 = z1 - 0.0001
@@ -115,26 +115,26 @@ bugFixTests = concat
 
 sqrtTests ::  forall a. (RealFloat a, Show a) => [Test a]
 sqrtTests = concat $  --all based on the expectations listed in Kahan's CSQRT function.
-     [ testC' "#1 " Sqrt z (E 0)   (E $  abs (sqrt x))
+     [ testC' "#1 " Sqrt z (E 0,    E $  abs (sqrt x))
                                                  Nothing | x <- xs, x >= 0, let z = (-x)  :+   0   ] 
-  ++ [ testC' "#2 " Sqrt z (E 0)   (E $ -abs (sqrt x))
+  ++ [ testC' "#2 " Sqrt z (E 0,    E $ -abs (sqrt x))
                      (Just (E 0,    E $  abs (sqrt x)))
                                                          | x <- xs, x >= 0, let z = (-x)  :+ (-0  )]
-  ++ [ testC' "#3 " Sqrt z (E inf) (E   inf )    Nothing | x <- xs ++ bads, let z =   x   :+ ( inf)]
-  ++ [ testC' "#4 " Sqrt z (E inf) (E (-inf))    Nothing | x <- xs ++ bads, let z =   x   :+ (-inf)]
-  ++ [ testC' "#5 " Sqrt z (E nan) (E nan)       Nothing | x <- xs        , let z = nan   :+ x     ]
-  ++ [ testC' "#6 " Sqrt z (E nan) (E nan)       Nothing | x <- xs        , let z = x     :+ nan   ]
-  ++ [ testC' "#7 " Sqrt z (E nan) (E nan)       Nothing |                  let z = nan   :+ nan   ]
-  ++ [ testC' "#8 " Sqrt z (E inf) (E (sign0 x)) Nothing | x <- xs        , let z = inf   :+ x     ]
-  ++ [ testC' "#9 " Sqrt z (E inf) (E nan)       Nothing |                  let z = inf   :+ nan   ]
-  ++ [ testC' "#10" Sqrt z (E inf) (E nan)       Nothing |                  let z = inf   :+ (-nan)]
-  ++ [ testC' "#11" Sqrt z (E 0)   (E (signI x)) Nothing | x <- xs        , let z = (-inf):+ x     ]
-  ++ [ testC' "#12" Sqrt z (E nan) (E inf)       Nothing |                  let z = (-inf):+ nan   ]
-  ++ [ testC' "#13" Sqrt z (E nan) (E inf)       Nothing |                  let z = (-inf):+ (-nan)] --suspect +/- in expected result is typo in Kahan. 
+  ++ [ testC' "#3 " Sqrt z (E inf, E   inf )    Nothing | x <- xs ++ bads, let z =   x   :+ ( inf)]
+  ++ [ testC' "#4 " Sqrt z (E inf, E (-inf))    Nothing | x <- xs ++ bads, let z =   x   :+ (-inf)]
+  ++ [ testC' "#5 " Sqrt z (E nan, E nan)       Nothing | x <- xs        , let z = nan   :+ x     ]
+  ++ [ testC' "#6 " Sqrt z (E nan, E nan)       Nothing | x <- xs        , let z = x     :+ nan   ]
+  ++ [ testC' "#7 " Sqrt z (E nan, E nan)       Nothing |                  let z = nan   :+ nan   ]
+  ++ [ testC' "#8 " Sqrt z (E inf, E (sign0 x)) Nothing | x <- xs        , let z = inf   :+ x     ]
+  ++ [ testC' "#9 " Sqrt z (E inf, E nan)       Nothing |                  let z = inf   :+ nan   ]
+  ++ [ testC' "#10" Sqrt z (E inf, E nan)       Nothing |                  let z = inf   :+ (-nan)]
+  ++ [ testC' "#11" Sqrt z (E 0  , E (signI x)) Nothing | x <- xs        , let z = (-inf):+ x     ]
+  ++ [ testC' "#12" Sqrt z (E nan, E inf)       Nothing |                  let z = (-inf):+ nan   ]
+  ++ [ testC' "#13" Sqrt z (E nan, E inf)       Nothing |                  let z = (-inf):+ (-nan)] --suspect +/- in expected result is typo in Kahan. 
 
 extremeSqrtTests :: [Test Double]
 extremeSqrtTests = concat $
-  [ testC "sqrt " (show z) (sqrt z) (B u) (B v) Nothing | (z,u:+v) <- extremes ++ ex2]
+  [ testC "sqrt " (show z) (sqrt z) (B u, B v) Nothing | (z,u:+v) <- extremes ++ ex2]
   where
     extremes =
       [ --expected results from WolframAlpha
@@ -156,7 +156,7 @@ realCpxMatchTests = concat
   --check imag is zero, but don't care what sign
   --since it's difficult to predict e.g. cos (3:+0) has -0.0, cos (4:+0) has 0.0.
   --(Conjugte check with check that cos (3:+0) is conj of cos (3:+(-0)), etc).
-  [ testC (fnName fn) (show z) fz (B fx) oob Nothing
+  [ testC (fnName fn) (show z) fz (B fx, oob) Nothing
   | fn <- allFunctions
   , x <- xs
   , not (exclude fn x)
@@ -177,7 +177,7 @@ realCpxMatchTests = concat
 
 nonNaNTests :: forall a. (RealFloat a, Show a) => [Test a]
 nonNaNTests = concat
-  [ testC' "" fn z (oob Real) (oob Imag) Nothing
+  [ testC' "" fn z (oob Real, oob Imag) Nothing
   | fn <- allFunctions
   , x <- extremes
   , y <- extremes
@@ -192,7 +192,7 @@ nonNaNTests = concat
 -- it it's on the imag line, it's one of atan or asinh. For both, +ve imag maps to QI  and -ve imag to QIII, hence won't be conjugates.
 conjTests :: forall a. (RealFloat a, Show a) => [Test a]
 conjTests = concat
-  [ testC (fnName fn) (show z) (f $ conjugate z) (E u) (E v) Nothing
+  [ testC (fnName fn) (show z) (f $ conjugate z) (E u, E v) Nothing
   | fn <- allFunctions
   , let f = fnF fn
   , x <- xs
@@ -204,7 +204,7 @@ conjTests = concat
 
 inverseTests :: forall a. (RealFloat a, Show a) => (a -> Expected a) -> [Test a]
 inverseTests match = concat $ 
-  [ testC (fnName invFn ++ " . " ++ fnName fn) (show z) (fnF invFn fnFz) (match $ realPart z) (match $ imagPart z) Nothing
+  [ testC (fnName invFn ++ " . " ++ fnName fn) (show z) (fnF invFn fnFz) (match $ realPart z, match $ imagPart z) Nothing
   | (fn, invFn) <- [(Sq,  Sqrt)
                    ,(Exp, Log)
                    ,(Sin, Asin)
@@ -237,8 +237,8 @@ inverseTests match = concat $
 gnumericTests :: (RealFloat a, Show a) => [Test a]
 gnumericTests = concatMap testFn allFunctions where
   testFn fn = concat $ zipWith testVal zs (fnYs fn) where
-    testVal z (C (u:+v)) | isIEEE u  = testC (fnName fn) (show z') (pushToPlusZero $ fnF fn z') (B u) (B v) Nothing
-                         | otherwise = testC (fnName fn) (show z ) (pushToPlusZero $ fnF fn z ) (B u) (B v) Nothing
+    testVal z (C (u:+v)) | isIEEE u  = testC (fnName fn) (show z') (pushToPlusZero $ fnF fn z') (B u, B v) Nothing
+                         | otherwise = testC (fnName fn) (show z ) (pushToPlusZero $ fnF fn z ) (B u, B v) Nothing
       where z' | Just q <- branchCutPointQuadrant fn z = pushToQuadrant q z
                | otherwise                             =                  z
     testVal _ Err        = []
@@ -251,7 +251,7 @@ gnumericTests = concatMap testFn allFunctions where
 
 regressionTests :: (RealFloat a, HasVal a, Show a) => (a -> Expected a) -> [Test a]
 regressionTests match = concat $
-  [ testC' "" fn z (match $ O.realPart fnCz) (match $ O.imagPart fnCz) Nothing
+  [ testC' "" fn z (match $ O.realPart fnCz, match $ O.imagPart fnCz) Nothing
   | fn <- allFunctions
   , fn /= Sq
   , x <- xs
@@ -264,7 +264,7 @@ regressionTests match = concat $
 
 doubleVsFloatTests :: [Test Float]
 doubleVsFloatTests = concat $ 
-  [ testC (fnName fn) (show zD) (fnF fn zF) (A $ double2Float ud) (A $ double2Float vd) Nothing
+  [ testC (fnName fn) (show zD) (fnF fn zF) (A $ double2Float ud, A $ double2Float vd) Nothing
   | fn <- allFunctions
   , x <- xs
   , y <- xs
@@ -618,14 +618,14 @@ testC fIEEEOnly name val (x:+y) u v
 type CExp a = (Expected a, Expected a)  --(expected real, expected imag)
 
 --a more compact version for many situations
-testC' :: (RealFloat a, Show a) => String -> Function -> Complex a -> Expected a -> Expected a -> Maybe (CExp a) -> [Test a]
+testC' :: (RealFloat a, Show a) => String -> Function -> Complex a -> CExp a -> Maybe (CExp a) -> [Test a]
 testC' label f z = testC (label ++ ": " ++ fnName f) (show z) (fnF f z) 
 
 --create a list of two tests, one for the realPart and one for the imagPart.
-testC :: RealFloat a => String -> String -> Complex a -> Expected a -> Expected a -> (Maybe (CExp a)) -> [Test a]
+testC :: RealFloat a => String -> String -> Complex a -> CExp a -> (Maybe (CExp a)) -> [Test a]
 testC name val (x:+y) = testC2 where
-  testC2 _ _ (Just (u, v)) | not (isIEEE x) = tests u v
-  testC2 u v _                              = tests u v
+  testC2 _    (Just (u,v)) | not (isIEEE x) = tests u v
+  testC2 (u,v) _                            = tests u v
   tests u v = [ Test name (val++"(R)") x u
               , Test name (val++"(I)") y v
               ]
