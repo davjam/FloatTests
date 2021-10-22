@@ -14,6 +14,7 @@ import HasVal
 
 import Data.Char
 import Data.Maybe
+import GHC.Float
 
 ------------------------------------
 --Tests
@@ -54,6 +55,8 @@ main = do
   putFails "regressionTests D0"     (regressionTests @D0      A)
   putFails "regressionTests Double" (regressionTests @Double  A)
   putFails "regressionTests Float"  (regressionTests @Float   $ A2 3)
+  
+  putFails "Double vs Float"  doubleVsFloatTests
 
 bugFixTests :: (RealFloat a, Show a) => [Test a]
 bugFixTests = concat
@@ -61,6 +64,7 @@ bugFixTests = concat
    let z = (-4):+0     in testC False "#20425 #1 sqrt"                (show z) (sqrt z)  (E 0)     (E 2)
   ,let z = (-4):+(-0)  in testC True  "#20425 #2 sqrt"                (show z) (sqrt z)  (E 0)     (E (-2))
   ,let z = mx:+mx      in testC False "#20425 #3 sqrt"                (show z) (sqrt z)  R         R     --extremeSqrtTests has more precise test
+  ,let z = mx:+mx      in testC False "extreme log"                   (show z) (log z)   R         R
   ,let z = (-1):+0     in testC False "#8532 #1 acosh"                (show z) (acosh z) (E 0)     (E pi)
   ,let z = (-1):+(-0)  in testC False "#8532 #2 acosh"                (show z) (acosh z) (E 0)     (E $ if isIEEE (realPart z) then -pi else pi)
   ,let z = 1e-20:+0    in testC False "atan email #1 atan"            (show z) (atan  z) (E 1e-20) (E 0)
@@ -222,6 +226,21 @@ regressionTests match = concat $
   , let zC = x O.:+ y
         fnCz = fromMaybe (fnC fn zC) $ override fn zC
   ]
+
+doubleVsFloatTests :: [Test Float]
+doubleVsFloatTests = concat $ 
+  [ testC False (fnName fn) (show zD) (fnF fn zF) (A $ double2Float ud) (A $ double2Float vd)
+  | fn <- allFunctions
+  , x <- xs
+  , y <- xs
+  , let zF = x :+ y
+        uf:+vf = fnF fn zF
+  , not (isNaN uf)
+  , not (isNaN vf)
+  , let zD = float2Double x :+ float2Double y
+        ud:+vd = fnF fn zD
+  ]
+  
 
 ------------------------------------
 --The functions to test
@@ -396,6 +415,8 @@ expectedRegression Sqrt z@(x:+y)  | oldSqrtOverflow z = True
 expectedRegression Log  z@(x:+y)  | isNegativeZero x && y == 0      = True  --branch cut at -0
                                   | x == 0 && abs y < sqrt mn       = True  --underflow in magnitude
                                   | y == 0 && abs x < sqrt mn       = True  --underflow in magnitude
+                                  | isGood x && isGood y
+                                      && isInfinite (magnitude z)   = True  --e.g. mx :+ mx
 expectedRegression Asin z@(x:+y)  | z*z+1 == z*z                    = True  --loss of precision -> NaN
                                   | z*z+(0:+1) == z*z               = True
                                   | isGood x && isGood y &&
@@ -473,6 +494,8 @@ override Acosh ((-1.0) O.:+ (-6.2138610988780994e-21))  = Just $   7.88280476662
 override Acosh ((-1.0) O.:+ ( 6.2138610988780994e-21))  = Just $   7.88280476662849959740264749e-11  O.:+ ( 3.14159265351096519079635839)
 override Acosh (( 1.0) O.:+ (-6.2138610988780994e-21))  = Just $   7.8828047666284996e-11            O.:+ (-7.8828047666284996e-11)
 override Acosh (( 1.0) O.:+ ( 6.2138610988780994e-21))  = Just $   7.8828047666284996e-11            O.:+   7.8828047666284996e-11
+override Log   z@(x O.:+ y) | abs x == 5.0e-324 --WA not quite accurate here.
+                           && abs y == 5.0e-324         = Just $ magEq x                             O.:+ O.phase z
 
 --For these, I think the old atanh was wrong.
 --I also think WA IS WRONG! (WA seems to think these are on the branch cut and goes in wrong direction. It gets e.g. 5.0e-19 right).
@@ -487,6 +510,25 @@ override Atanh z@(x O.:+ (-1.0e-45))  | x > 2 && x < 4 = Just $   x' O.:+ (-1.57
   where x' O.:+ _ = atanh z
 
 override _ z = Nothing
+
+{-
+magnitude (x:+x) = sqrt(x*x + x*x) = sqrt(2*x*x) = sqrt 2 * x
+
+if (m,e) = decodeFloat x, then x = m * r^e
+
+log(magnitude x) = log (sqrt 2 * x)
+                 = log (sqrt 2 * m * r^e)
+                 = log (2^(1/2) * m * r^e)
+                 = log (2^(1/2)) + log m + log (r^e)
+                 = 0.5*log 2 + log m + e*log r
+-}
+
+magEq :: RealFloat a => a -> a
+magEq x = 0.5*log 2 + log m + e*log r
+  where (m',e') = decodeFloat (abs x)
+        m = fromIntegral m'
+        e = fromIntegral e'
+        r = fromIntegral $ floatRadix x
 
 ------------------------------------
 -- numbers to test with

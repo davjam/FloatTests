@@ -17,7 +17,7 @@
 --
 -----------------------------------------------------------------------------
 
--- This is a copy from \ghc\libraries\base\Data at at 21/9/21.
+-- This is a copy from \ghc\libraries\base\Data at at 21/9/21 (GHC 8.10.7).
 -- I'm keeping it so TrigDiags will continue to work, even when the Data.Complex is fixed.
 
 module OldComplex

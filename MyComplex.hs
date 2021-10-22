@@ -132,13 +132,11 @@ polar            :: (RealFloat a) => Complex a -> (a,a)
 polar z          =  (magnitude z, phase z)
 
 -- | The nonnegative magnitude of a complex number.
+-- See Note [magnitude implementation]
 {-# SPECIALISE magnitude :: Complex Double -> Double #-}
 magnitude :: (RealFloat a) => Complex a -> a
-magnitude (x:+y) =  scaleFloat k
-                     (sqrt (sqr (scaleFloat mk x) + sqr (scaleFloat mk y)))
-                    where k = exponent (max (abs x) (abs y))  --ensure handles x or y == 0, so magnitude (tiny:+0) works.
-                          mk = - k
-                          sqr z = z * z
+magnitude z =  scaleFloat k m where (m,k) = magScale z
+
 
 -- | The phase of a complex number, in the range @[-'pi', 'pi']@.
 -- If the number has a negative real part, and +/- 0 imaginary part
@@ -202,7 +200,12 @@ instance  (RealFloat a) => Floating (Complex a) where
 
     exp (x:+y)     =  expx * cos y :+ expx * sin y
                       where expx = exp x
-    log z          =  log (magnitude z) :+ phase z  --see note on phase
+
+    -- See Note [log implementation]                      
+    log z          = (k' * log r + log m) :+ phase z
+                      where (m,k) = magScale z
+                            k' = fromIntegral k
+                            r  = fromIntegral $ floatRadix m
 
     x ** y = case (x,y) of
       (_ , (0:+0))  -> 1 :+ 0
@@ -221,9 +224,9 @@ instance  (RealFloat a) => Floating (Complex a) where
         nan = 0/0
 
     -- See Note [sqrt implementation]
-    -- qrt((-0):+0) is unlike sqrt(-0) which has slighly odd IEEE 754 requirement to be (-0).
+    -- sqrt((-0):+0) is unlike sqrt(-0) which has slighly odd IEEE 754 requirement to be (-0).
     sqrt (0:+y@0)                 =      0 :+          y
-    sqrt (x:+y  ) | isInfinite y  =  abs y :+          y
+    sqrt z@(x:+y) | isInfinite y  =  abs y :+          y
                   | x >= 0        =      r :+          s
                   | otherwise     =  abs s :+ copySign r y
       where
@@ -234,9 +237,8 @@ instance  (RealFloat a) => Floating (Complex a) where
           | even k            = scaleFloat (k `div` 2 - 1) (sqrt (q+q))
           | otherwise         = scaleFloat ((k-1) `div` 2) (sqrt q)
           where
-            q = sqrt(sqr(scaleFloat (-k) x) + sqr(scaleFloat (-k) y)) + scaleFloat (-k) (abs x)
-            sqr w = w * w
-            k = exponent (max (abs x) (abs y))  --cf magnitude
+            (m,k) = magScale z
+            q = m + scaleFloat (-k) (abs x)
         s = y/r/2
 
     --all of these have the same 0 assumption as exp
@@ -256,22 +258,20 @@ instance  (RealFloat a) => Floating (Complex a) where
                             p = sqrt(1+s*s)
                             cutover = F.asinh maxNonInfiniteFloat / 4 --NB fails in Windows, at time of writing
 
-    asin z@(x:+_)  =  atan(x/r) :+ F.asinh s
-                      where r = realPart (sqrt(-z+:1)*sqrt(z+:1))
-                            --NB, conjugate(sqrt w)) /= sqrt(conjugate w) when w doesn't support -0.0.
-                            --(Kahan's formula sqrt(z-1)* is ambiguous, but like this works correctly for IEEE754 and not floats).
-                            s = imagPart (conjugate(sqrt(-z+:1))*sqrt(z+:1))
-    acos z         =  x :+ y
-                      where x = 2 * atan(realPart(sqrt(-z+:1))/realPart(sqrt(z+:1)))
-                            y = F.asinh (imagPart(conjugate(sqrt(z+:1))*sqrt(-z+:1)))
+    -- See Note [asin, acos, acosh implementation]
+    asin z@(x:+_)  =  atan(x/realPart (sqrt(-z+:1)*sqrt(z+:1)))
+                   :+ asinImag z
+
+    acos z         =  2 * atan(realPart(sqrt(-z+:1))/realPart(sqrt(z+:1)))
+                   :+ asinImag (-z)
+
+    acosh z        =  acoshReal z
+                   :+ 2 * atan (imagPart(sqrt(z-:1)) / realPart(sqrt(z+:1)))
 
     atan z         =  -iTimes(atanh(iTimes z))
 
     asinh z        =  -iTimes(asin(iTimes z))
-    -- Take care to allow (-1)::Complex, fixing #8532
-    acosh z       = x :+ y
-                    where x = F.asinh(realPart(conjugate(sqrt(z-:1)) * sqrt(z+:1)))
-                          y = 2 * atan (imagPart(sqrt(z-:1)) / realPart(sqrt(z+:1)))
+
     atanh w@(u:+_) = conjugate(atanh'(conjugate w *: b)) *: b
       where
       b = copySign 1 u
@@ -283,7 +283,6 @@ instance  (RealFloat a) => Floating (Complex a) where
                       | otherwise            =  log1p(4*x/(sqr(1-x)+sqr(abs y)))/4
                                              :+ phase(((1-x)*(1+x) - sqr(abs y)) :+ 2*y)/2
       th = sqrt maxNonInfiniteFloat / 4
-      sqr z = z * z
 
     log1p x@(a :+ b)
       | abs a < 0.5 && abs b < 0.5
@@ -298,6 +297,25 @@ instance  (RealFloat a) => Floating (Complex a) where
       , w <- -2*v*v = (u*w + u + w) :+ (u+1)*sin b
       | otherwise = exp x - 1
     {-# INLINE expm1 #-}
+
+asinImag, acoshReal :: RealFloat a => Complex a -> a
+
+--NB, conjugate(sqrt w)) /= sqrt(conjugate w) when w doesn't support -0.0: (e.g. (-1):+0).
+--(Kahan's formula sqrt(z-1)* is ambiguous, but like this works correctly for IEEE754 and not floats).
+asinImag z@(_:+y) = maybe (F.asinh $ imagPart $ conjugate (sqrt(-z+:1)) * sqrt (z+:1))
+                          (`copySign` y)
+                          (asinhQ z)
+
+acoshReal z       = maybe (F.asinh $ realPart $ conjugate (sqrt(z-:1)) * sqrt (z+:1))
+                          id
+                          (asinhQ z)
+
+asinhQ :: RealFloat a => Complex a -> Maybe a
+asinhQ z@(x:+_) | abs x > 1 && x+1 == x  =  Just (log 2 + log m + k*log b)
+                | otherwise              =  Nothing
+  where (m,k')  =  magScale z
+        k       =  fromIntegral k'
+        b       =  fromIntegral $ floatRadix x
 
 {-
 Note [Kahan implementations]
@@ -319,11 +337,51 @@ Not all functions are based on Kahan's procedures, since
 some seem to work correctly already.
 
 
+Note on [magnitude implementation]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  magnitude z@(x:+y)
+  = sqrt (x^2 + y^2)                       but may overflow, even for reasonable result.
+  = b^(k) * sqrt (x^2 + y^2) * b^(-k)      where b is the base (radix), for some suitable k
+  = b^(k) * sqrt ((x^2 + y^2) * (b^(-k))^2)
+  = b^(k) * sqrt (x^2*(b^(-k))^2 + y^2*(b^(-k))^2)
+  = b^(k) * sqrt ((x*b^(-k))^2 + (y*b^(-k))^2)
+  = b^(k) * m
+    where (m,k) = magScale z
+  
+
+Note on [log implementation]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  log z = log (magnitude z) :+ phase z
+
+    log (magnitude z)
+  = log (b^(k) * m)
+  = log (b^(k)) + log  m
+  = k * log b + log m
+    where (m,k) = magScale z
+
+  Kahan's logic "if k=0 and T0 < beta and (beta <=T1 or rho<T2)" doesn't make sense to me:
+    k = floor(logBase 2 (max (abs x) (abs y))) = 0
+    => 0 <= logBase 2 (max (abs x) (abs y)) < 1
+    => 1 <= max (abs x) (abs y) < 2
+    => 1 <= beta < 2
+        => T0 < beta
+    => rho = sqrt (x^2 + y^2) < sqrt 8 < T2
+    Hence the condition seems to be eqivalent to just k=0.
+    
+  Presumably, since we then use log1p((beta-1)(beta+1)+theta^2)/2
+  we want (beta-1)(beta+1)+theta^2 close to zero (else we'd expect no benefit from log1p
+    z@(x:+y) = 1.0000000001:+0 gives this:
+    beta = 1.0000000001, th = 0, (beta-1)(beta+1)+theta^2 ~= 1e-10
+    but we then get ~5e-11 as result, which is less accurate than the
+      log rho / 2 + (fromIntegral k + j) * log 2
+    formula.
+
+
 Note [sqrt implementation]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   Per https://en.wikipedia.org/wiki/Square_root#Algebraic_formula
 
-  sqrt(x:+y) = u :+ copySign v y where 
+  sqrt z@(x:+y) = u :+ copySign v y where 
 
             [ sqrt(x^2+y^2) + x]
     u = sqrt[ -----------------]
@@ -347,6 +405,9 @@ Note [sqrt implementation]
     3. We can scale to avoid some under/over flow.
 
        let q = [sqrt(x^2+y^2) + abs x]*b^(-k), where b=floatRadix, for some suitable scaling k
+             = sqrt(x^2+y^2)*b^(-k) + (abs x)*b^(-k)
+             = m + (abs x)*b^(-k)
+               where (m,k) = magScale z
        then r = sqrt(q*b^k/2)
 
        if b == 2, we can get avoid more under/over flow by also doing:
@@ -365,6 +426,42 @@ Note [sqrt implementation]
               = sqrt q * sqrt((2^j)^2)
               = sqrt q * 2^j
               = sqrt q * 2^((k-1) `div` 2)
+
+Note [asin, acos, acosh implementation]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  I can't (yet) derive Kahan's formulae (strangely given as comments)
+  from the logrithmic definitions.
+  But they seem to me to be correct, but are vulnerable to intermediate overflow.
+  To solve the overflow:
+
+  For large enough x (i.e. abs x > lim):
+    x+1 == x
+    sqrt(x^2+y^2) > abs x > lim
+
+  Note: Re(sqrt(z*conjugate z))  = Re(sqrt((x+iy)(x-iy)))
+                                 = Re(sqrt(x^2+y^2) :+ 0)
+                                 = sqrt(x^2+y^2)
+                                 = magnitude z
+        Im(sqrt(-z*conjugate z)) = Im(sqrt(-x^2+y^2) :+ 0)
+                                 = Im(-i * sqrt(x&2+y^2) :+ 0)
+                                 = -magnitude z (IEEE types)
+                                 =  magnitude z (non IEEE)
+
+  let q = imagPart(conjugate(sqrt(z+:1))*sqrt(-z+:1))
+        = imagPart(conjugate(sqrt z)*sqrt(-z))
+        = +/- imagPart(sqrt(conjugate z)*sqrt(-z))
+        = +/- imagPart(sqrt(-z*(conjugate z)))
+        = +/- magnitude z
+        = +/- m*b^k  where (m,k) = magScale z
+
+  Then
+  asinh q = log(q + sqrt (q^2+1))
+          = log(q + sqrt (q^2))
+          = log(2 * q)
+          = log 2 + log q
+          = log 2 + log m + k*log b
+
+  Similar for acos, acosh.
 -}
 
 -- | @since 4.8.0.0
@@ -415,6 +512,9 @@ instance MonadFix Complex where
 -- -----------------------------------------------------------------------------
 -- Internal functions
 
+sqr :: RealFloat a => a -> a  --not suitable for Complex. (See Kahan CSQUARE)
+sqr x = x * x
+
 -- copySign x y returns the value of x, but with the sign of y.
 -- returns NaN if x is NaN. Per IEEE spec, "result is undefined" if y is NaN.
 copySign :: RealFloat a => a -> a -> a
@@ -424,6 +524,11 @@ copySign x y | makePos   = abs x
     makePos | isNegativeZero y = False
             | y < 0            = False
             | otherwise        = True
+
+magScale :: (RealFloat a) => Complex a -> (a, Int)  --magScale z = (magnitude (z/r^k), k). See note [magnitude implementation]
+magScale (x:+y) = (sqrt (sqr (scaleFloat mk x) + sqr (scaleFloat mk y)), k)
+  where k = exponent (max (abs x) (abs y))  --NOT max (exponent x) (exponent y), which fails with e.g. tiny:+0.
+        mk = - k
 
 -- maxNonInfiniteFloat is the largest non-infinite floating point value.
 maxNonInfiniteFloat :: forall a. RealFloat a => a
