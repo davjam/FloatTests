@@ -42,7 +42,7 @@ module MyComplex
 
         -- * Branch Cuts and Principal Values
         -- $BranchCuts
-        
+
         -- ** Explanation
         -- $BranchCutsExp
         )  where
@@ -201,8 +201,8 @@ instance  (RealFloat a) => Floating (Complex a) where
     exp (x:+y)     =  expx * cos y :+ expx * sin y
                       where expx = exp x
 
-    -- See Note [log implementation]                      
-    log z          = (k' * log r + log m) :+ phase z
+    -- See Note [log implementation]
+    log z          = (k' * log r + log m) :+ phase z  --see note on phase
                       where (m,k) = magScale z
                             k' = fromIntegral k
                             r  = fromIntegral $ floatRadix m
@@ -347,7 +347,7 @@ Note on [magnitude implementation]
   = b^(k) * sqrt ((x*b^(-k))^2 + (y*b^(-k))^2)
   = b^(k) * m
     where (m,k) = magScale z
-  
+
 
 Note on [log implementation]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -367,7 +367,7 @@ Note on [log implementation]
         => T0 < beta
     => rho = sqrt (x^2 + y^2) < sqrt 8 < T2
     Hence the condition seems to be eqivalent to just k=0.
-    
+
   Presumably, since we then use log1p((beta-1)(beta+1)+theta^2)/2
   we want (beta-1)(beta+1)+theta^2 close to zero (else we'd expect no benefit from log1p
     z@(x:+y) = 1.0000000001:+0 gives this:
@@ -381,7 +381,7 @@ Note [sqrt implementation]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   Per https://en.wikipedia.org/wiki/Square_root#Algebraic_formula
 
-  sqrt z@(x:+y) = u :+ copySign v y where 
+  sqrt z@(x:+y) = u :+ copySign v y where
 
             [ sqrt(x^2+y^2) + x]
     u = sqrt[ -----------------]
@@ -542,7 +542,7 @@ maxNonInfiniteFloat = encodeFloat m n where
 
 -- $BranchCuts
 -- #BranchCuts#
--- 
+--
 -- The "inverse" complex functions have branch cuts and principal values in ranges as follows:
 --
 -- +--------------------+----------------------------------------------------------+-----------------------------------------------+
@@ -585,7 +585,7 @@ maxNonInfiniteFloat = encodeFloat m n where
 -- points on a branch cut are continuous with mappings of points in one of the adjacent quadrants
 -- as indicated in the table below.
 -- In addition, the range of the functions excludes certain values, also indicated in the table.
--- 
+--
 -- +--------------------+-----------------------------------+-----------------------------------------------------------------------------------------+
 -- + (inverse) function + branch cut(s) continuous with     + range excludes                                                                          +
 -- +====================+===================================+=========================================================================================+
@@ -639,7 +639,7 @@ maxNonInfiniteFloat = encodeFloat m n where
 -- branch points with positive and negative zero in the imaginary part.
 -- For other branch points, a negative zero input will be reflected in the output.
 --
--- Haskell's branch cuts, continuities, ranges and branch points follow the recommendations by Kahan 
+-- Haskell's branch cuts, continuities, ranges and branch points follow the recommendations by Kahan
 -- (Branch Cuts for Complex Elementary Functions or Much Ado About Nothing's Sign Bit, 1987),
 -- and are consitant with those in some other languages such as Common Lisp.
 --
@@ -664,7 +664,7 @@ maxNonInfiniteFloat = encodeFloat m n where
 -- the /principal value/.
 -- The standard principal values for @sqrt@ are those @x:+y@ where @x >= 0@:
 -- half of the complex plane.
--- 
+--
 -- The table below shows the square of two sequences of complex numbers:
 --
 -- +-------------------------+------------------------+--------------------------+
@@ -681,7 +681,7 @@ maxNonInfiniteFloat = encodeFloat m n where
 -- +    @(-0.050):+2.0@      + __@( 0.050):+(-2.0)@__ + @(-4):+(-0.2)@           +
 -- +-------------------------+------------------------+--------------------------+
 --
--- Each corresponding @v@ and @w@ has the same square @z@. 
+-- Each corresponding @v@ and @w@ has the same square @z@.
 -- @sqrt@ maps each of these @z@ values back to the principal value
 -- (whichever of @v@ or @w@ has a non-negative real part, as highlighted in bold).
 -- Hence, although the sequence @z@ is continuous, @sqrt z@ is discontinuous,
@@ -695,9 +695,9 @@ maxNonInfiniteFloat = encodeFloat m n where
 --
 -- In the case of @sqrt $ (-4):+( 0.0)@, either @v@ or @w@ could be chosen, but:
 --
--- * When dealing with floating point numbers that support negative zeros, 
+-- * When dealing with floating point numbers that support negative zeros,
 -- the result is chosen so that
--- @sqrt $ (-4):+( 0.0)@ is continuous with points @sqrt $ (-4):+y@ where @y>0@, hence @( 0.000):+2.0@, and 
+-- @sqrt $ (-4):+( 0.0)@ is continuous with points @sqrt $ (-4):+y@ where @y>0@, hence @( 0.000):+2.0@, and
 -- @sqrt $ (-4):+(-0.0)@ is continuous with points @sqrt $ (-4):+y@ where @y<0@, hence @( 0.000):(-2.0)@.
 -- It is helpful to think of the branch cut as being "between" @0.0@ and @-0.0@.
 --
