@@ -46,7 +46,7 @@ main = do
 
   putFails "inverseTests D0"     (inverseTests @D0     A)
   putFails "inverseTests Double" (inverseTests @Double A)
-  putFails "inverseTests Float"  (inverseTests @Float  $ A2 2)  --Float just isn't as accurate
+  putFails "inverseTests Float"  (inverseTests @Float  $ X 2)  --Float just isn't as accurate
 
   putFails "gnumericTests D0"     (gnumericTests @D0)
   putFails "gnumericTests Double" (gnumericTests @Double)
@@ -54,7 +54,7 @@ main = do
 
   putFails "regressionTests D0"     (regressionTests @D0      A)
   putFails "regressionTests Double" (regressionTests @Double  A)
-  putFails "regressionTests Float"  (regressionTests @Float   $ A2 3)
+  putFails "regressionTests Float"  (regressionTests @Float   $ X 3)
   
   putFails "Double vs Float"  doubleVsFloatTests
 
@@ -110,7 +110,7 @@ bugFixTests = concat
 
   ,let z1 = (-1531.9375):+0 --For Float, original code gave significantly different results for z1 & z2.
        z2 = z1 - 0.0001
-                       in [Test       "31: asin" (show z1) (imagPart $ asin z1) (A2 2 $ imagPart $ asin z2)]
+                       in [Test       "31: asin" (show z1) (imagPart $ asin z1) (X 2 $ imagPart $ asin z2)]
   ]
 
 sqrtTests ::  forall a. (RealFloat a, Show a) => [Test a]
@@ -183,7 +183,7 @@ nonNaNTests = concat
   , y <- extremes
   , let z = x :+ y
         oob p | outOfBounds fn z == Just p = E nan
-              | otherwise                  = NNaN
+              | otherwise                  = V
   ]
   where extremes = [-mx, -mn, -0, 0, mn, mx]
 

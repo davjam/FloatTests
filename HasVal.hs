@@ -11,14 +11,14 @@ import Control.Monad
 data Expected a = E a    --exactly
                 | A a    --approximately (but to many sfs)
                 | B a    --like A, but if 0, -0, Inf, -Inf, NaN checked exactly (including sign)
-                | A2 Int a  --like A, but to less precision.
+                | X Int a--like A, but even more approXimate.
                 | R      --any real (not Inf, not NaN)
-                | P      -- real and positive (not zero)
-                | N      -- real and negative (not zero)
-                | NNaN   --not NaN
+                | P      --real and positive (not zero)
+                | N      --real and negative (not zero)
+                | V      --A valid result (not NaN)
                 | Z      --exactly zero, but either + or -.
-                | SI a   --small increment above
-                | SD a   --small decrement below
+                | I a    --small increment above
+                | D a    --small decrement below
   deriving Show
 
 class HasVal a where
@@ -38,13 +38,11 @@ hasFltVal :: RealFloat a => Int -> a -> Expected a -> Bool
 hasFltVal _   x R     | isNaN x          = False
                       | isInfinite x     = False
                       | otherwise        = True
-hasFltVal _   x P     | isNaN x          = False
-                      | isInfinite x     = False
-                      | otherwise        = x > 0
-hasFltVal _   x N     | isNaN x          = False
-                      | isInfinite x     = False
-                      | otherwise        = x < 0
-hasFltVal _   x NNaN  | isNaN x          = False
+hasFltVal bps x P     = hasFltVal bps x R && x > 0
+hasFltVal bps x N     = hasFltVal bps x R && x < 0
+hasFltVal _   0 Z     = True
+hasFltVal _   _ Z     = False
+hasFltVal _   x V     | isNaN x          = False
                       | otherwise        = True
 hasFltVal _   x (E y) | isNaN y          = isNaN x
                       | isNaN x          = False
@@ -52,23 +50,18 @@ hasFltVal _   x (E y) | isNaN y          = isNaN x
                       | isNegativeZero x = False
                       | otherwise        = x == y
 hasFltVal bps x (B y) | isNaN y          = isNaN x
-                       | isNaN x          = False
-                       | y == 0           = x == y && isNegativeZero x == isNegativeZero y
-                       | isInfinite y     = x == y
-                       | otherwise        = approx bps x y
-hasFltVal bps x (A y) | isNaN y          = isNaN x
                       | isNaN x          = False
-                      | abs y > 1e19   = abs x > 1e19 || isInfinite x
-                      | isInfinite y     = abs x > 2^(2*bps)  --XXXX check!
+                      | y == 0           = x == y && isNegativeZero x == isNegativeZero y
+                      | isInfinite y     = x == y
                       | otherwise        = approx bps x y
-hasFltVal bps x (A2 n y) | isNaN y          = isNaN x
-                       | isNaN x          = False
-                       | isInfinite y     = abs x > 2^(2*bps)
-                       | otherwise        = approx (bps `div` n) x y
-hasFltVal bps x (SI s) = s < x && x - s < 1/2^bps
-hasFltVal bps x (SD s) = s > x && s - x < 1/2^bps
-hasFltVal _   0 Z      = True
-hasFltVal _   _ Z      = False
+hasFltVal bps x (A y) = hasFltVal bps x (X 1 y)
+hasFltVal bps x (X n y)
+                      | isNaN y          = isNaN x
+                      | isNaN x          = False
+                      | isInfinite y     = x == y
+                      | otherwise        = approx (bps `div` n) x y
+hasFltVal bps x (I s) = s < x && x - s < 1/2^bps
+hasFltVal bps x (D s) = s > x && s - x < 1/2^bps
 
 approx :: RealFloat a => Int -> a -> a -> Bool
 approx bps x y

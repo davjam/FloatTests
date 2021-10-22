@@ -271,8 +271,8 @@ smallNums = ns ++ map negate ns where
 -- Only useful where formulae cutover from one expression to another.
 
 monotonTests :: (RealFloat a, Show a) => [Test a]
-monotonTests = concat [[Test "asinh" (show xup  ) yup   (SI y0)
-                       ,Test "asinh" (show xdown) ydown (SD y0)
+monotonTests = concat [[Test "asinh" (show xup  ) yup   (I y0)
+                       ,Test "asinh" (show xdown) ydown (D y0)
                        ]
                       | (f, x0) <- monotonTestPoints
                       , let (y0, xup,   yup)   = yStep nextUp   f x0
