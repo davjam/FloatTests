@@ -1,6 +1,6 @@
 {-# OPTIONS -Wall -Wpartial-fields #-}
 
-module HasVal (Expected(..), HasVal(..), Test(..), putFails)
+module TestValue (Expected(..), HasVal(..), Test(..), putFails)
 where
 
 import Double0

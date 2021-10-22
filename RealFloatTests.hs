@@ -8,7 +8,7 @@
 {-# HLINT ignore "Redundant $" #-}
 {-# HLINT ignore "Use tan" #-}
 
-import HasVal
+import TestValue
 import Double0
 
 --uncomment these to test revised functions.
