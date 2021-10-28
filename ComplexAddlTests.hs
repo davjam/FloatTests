@@ -8,6 +8,7 @@
 
 import MyComplex
 import qualified OldComplex as O
+import qualified ComplexTaylor as T
 import qualified MyFloat as F
 import Double0
 import TestValue
@@ -53,6 +54,8 @@ main = do
   putFails "regressionTests Float"  (regressionTests @Float   $ X 3)
   
   putFails "Double vs Float"  doubleVsFloatTests
+
+  putFails "Taylor Double" (taylorTests @Double)
 
 sqrtTests ::  forall a. (RealFloat a, Show a) => [Test a]
 sqrtTests = concat $  --all based on the expectations listed in Kahan's CSQRT function.
@@ -217,6 +220,30 @@ doubleVsFloatTests = concat $
         ud:+vd = fnF fn zD
   ]
   
+taylorTests :: (RealFloat a, HasVal a, Show a) => [Test a]
+taylorTests = concat $
+  [ testC (show fn) (show zC) (fnF (fnTfn fn) zC) (A $ fromRational u, A $ fromRational v) Nothing
+  | fn <- [T.Sin, T.Cos, T.Sinh, T.Cosh],
+    x <- rats, y <- rats,
+    let zT = x T.:+ y,
+    let zC = fromRational x :+ fromRational y,
+    let (u T.:+ v) = T.fnT fn zT
+  ]
+  where
+
+fnTfn :: T.Function -> Function
+fnTfn T.Sin  = Sin
+fnTfn T.Cos  = Cos
+fnTfn T.Sinh = Sinh
+fnTfn T.Cosh = Cosh
+
+rats :: [Rational]
+rats = takeWhile (<= 1.5*piRat) $ iterate (+ piRat/4) (-1.5 * piRat)
+
+piRat :: Rational
+piRat = 4 / foldr (\i f -> 2*i-1 + i^(2::Int)/f) (2*n - 1) [1..n]
+  where n = 30  --21 gives similar accuracy as pi::Double
+
 
 ------------------------------------
 --The functions to test
