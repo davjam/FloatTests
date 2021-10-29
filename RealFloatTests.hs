@@ -13,7 +13,6 @@ import Double0
 
 --uncomment these to test revised functions.
 import Prelude hiding (asinh, atanh, atan2)
-import qualified Prelude as P (atan2)
 import MyFloat (asinh, atanh, atan2)
 
 main :: IO ()
@@ -310,33 +309,29 @@ yStep xStep f x0 = (y0, x1, f x1) where
 
 atan2Tests :: forall a. (RealFloat a, Show a) => [Test a]
 atan2Tests = zipWith test [(y, x, atan2 y x) | y <- ys, x <- xs] zs
-  where test (y, x, ac) ex = Test "atan2" (show (y, x)) ac (B ex)
+  where test (y, x, ac) ex = Test "atan2" (show (y, x)) ac (E ex)
         xs | isIEEE a =  [-inf, -2, -0,  0,  2,  inf, nan]
            | otherwise = [-inf, -2,      0,  2,  inf, nan]
         ys | isIEEE a  = [ inf,  3,  0, -0, -3, -inf, nan]
            | otherwise = [ inf,  3,  0,     -3, -inf, nan]
-        zs | isIEEE a =   [ 3*pi/4,  pi/2 ,  pi/2,  pi/2,  pi/2, pi/4, nan,
-                            pi    ,  t3m2 ,  pi/2,  pi/2,  t32 , 0   , nan,
-                            pi    ,  pi   ,  pi  ,  0   ,  0   , 0   , nan,
+        zs | isIEEE a =   [ 3*pi/4,  pi/2 ,  pi/2,  pi/2,  pi/2, pi/4, nan, --y = inf
+                            pi    , pi-t32,  pi/2,  pi/2,  t32 , 0   , nan, --y = 3
+                            pi    ,  pi   ,  pi  ,  0   ,  0   , 0   , nan, --etc
                            -pi    , -pi   , -pi  , -0   , -0   ,-0   , nan,
-                           -pi    ,  tm3m2, -pi/2, -pi/2,  tm32,-0   , nan,
+                           -pi    , t32-pi, -pi/2, -pi/2, -t32 ,-0   , nan,
                            -3*pi/4, -pi/2 , -pi/2, -pi/2, -pi/2,-pi/4, nan,
                             nan   ,  nan  ,  nan ,  nan ,  nan , nan , nan
                           ]
            | otherwise = [ 3*pi/4,  pi/2 ,         pi/2,  pi/2, pi/4, nan,
-                           pi    ,  t3m2 ,         pi/2,  t32 , 0   , nan,
+                           pi    , pi-t32,         pi/2,  t32 , 0   , nan,
                            pi    ,  pi   ,         0   ,  0   , 0   , nan,
                                                                           
-                          -pi    ,  tm3m2,        -pi/2,  tm32,-0   , nan,
+                          -pi    , t32-pi,        -pi/2, -t32 ,-0   , nan,
                           -3*pi/4, -pi/2 ,        -pi/2, -pi/2,-pi/4, nan,
                            nan   ,  nan  ,         nan ,  nan , nan , nan
                          ]
-        t32   = P.atan2   3    2
-        tm32  = P.atan2 (-3)   2
-        t3m2  = P.atan2   3  (-2)
-        tm3m2 = P.atan2 (-3) (-2)
-        a = undefined :: a
-              
+        t32   = atan (3/2)
+        a     = undefined :: a
 
 
 -----------------------------------------------------------------------------
