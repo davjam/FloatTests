@@ -1,12 +1,13 @@
 {-# OPTIONS -Wall -Wpartial-fields #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module MyFloat (asinh, atanh, copySign, asinhCutover)
+module MyFloat (asinh, atanh, copySign, asinhCutover, atan2)
 where
 
-import           Prelude       hiding (asinh, atanh)
+import           Prelude       hiding (asinh, atanh, atan2)
 import           Numeric              (log1p)
 
+--import Debug.Trace
 
 {- ASINH
 
@@ -48,14 +49,35 @@ atanh x = atanh' $ abs x
 
 {-
 copySign x y returns the value of x, but with the sign of y.
-returns NaN if x is NaN. Per IEEE spec, "result is undefined" if y is NaN.
+returns NaN if x is NaN. Per IEEE spec, "result is undefined" if y is NaN, but we'll make it NaN.
 -}
 
 copySign :: RealFloat a => a -> a -> a
-copySign x y | makePos   = abs x
-             | otherwise = negate $ abs x
-  where
-    makePos | isNegativeZero y = False
-            | y < 0            = False
-            | otherwise        = True
+copySign x y | isNaN y    =  y
+             | isNeg y    =  negate $ abs x
+             | otherwise  =  abs x
+  where isNeg r  =  isNegativeZero r || r < 0
 
+atan2 :: RealFloat a => a -> a -> a
+atan2 y x | x == 0 && y == 0  =  atan2'             y  (copySign 1 x)
+          | isInfinite x &&
+            isInfinite y      =  atan2' (copySign 1 y) (copySign 1 x)
+          | otherwise         =  atan2'             y              x
+  where
+  atan2' v u | abs v > abs u  =  copySign (pi/2) v - atan (u/v)
+             | u < 0          =  copySign  pi    v + atan (v/u)
+             | otherwise      =                      atan (v/u)
+
+{-
+atan2 :: RealFloat a => a -> a -> a
+atan2 = (uncurry atan2'') ... atan2'
+  where
+  atan2'  y x |       0 == y &&       0 == x = (           y, copySign 1 x)
+              | isInfinite y && isInfinite x = (copySign 1 y, copySign 1 x)
+              | otherwise                    = (           y,            x)
+  atan2'' y x | abs y > abs x  =  copySign (pi/2) y - atan (x/y)
+              | x < 0          =  copySign  pi    y + atan (y/x)
+              | otherwise      =                      atan (y/x)
+  (...) = (.) . (.) --"blackbird operator". very much like (.) (function composition),
+                    --but passes both args to atan2 to atan2'
+-}
