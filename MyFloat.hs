@@ -1,13 +1,12 @@
 {-# OPTIONS -Wall -Wpartial-fields #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
+
 module MyFloat (asinh, atanh, copySign, asinhCutover, atan2)
 where
 
 import           Prelude       hiding (asinh, atanh, atan2)
 import           Numeric              (log1p)
-
---import Debug.Trace
 
 {- ASINH
 
