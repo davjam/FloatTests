@@ -176,8 +176,22 @@ instance  (RealFloat a) => Num (Complex a)  where
     (x:+y) * (x':+y')   =  (x*x'-y*y') :+ (x*y'+y*x')
     negate (x:+y)       =  negate x :+ negate y
     abs z               =  magnitude z :+ 0
-    signum (0:+0)       =  0
-    signum z@(x:+y)     =  x/r :+ y/r  where r = magnitude z
+
+    signum (x@0:+y)     = x :+ signum y --including 0:+NaN
+    signum (x:+y@0)     = signum x :+ y --ditto NaN:+0
+    signum z@(x:+y)
+      | otherwise       = case (isInfinite x, isInfinite y) of
+                            (True,  True ) -> signum' $ (copySign 1 x) :+ (copySign 1 y)
+                            (True,  False) -> --y not zero or infinite, but might be NaN
+                                              signum' $ (copySign y x) :+ (copySign 0 y)
+                            (False, True ) -> --ditto x
+                                              signum' $ (copySign 0 x) :+ (copySign x y)
+                            (False, False) -> signum' z
+      where
+        signum' w@(u:+v)     = scaleFloat (-k) u / m
+                            :+ scaleFloat (-k) v / m
+          where (m,k) = magScale w
+
     fromInteger n       =  fromInteger n :+ 0
 
 -- | @since 2.01
@@ -516,14 +530,13 @@ sqr :: RealFloat a => a -> a  --not suitable for Complex. (See Kahan CSQUARE)
 sqr x = x * x
 
 -- copySign x y returns the value of x, but with the sign of y.
--- returns NaN if x is NaN. Per IEEE spec, "result is undefined" if y is NaN.
+-- returns NaN if x is NaN. Per IEEE requirement says, "result is undefined"
+-- if y is NaN, but we'll define it to keep x.
 copySign :: RealFloat a => a -> a -> a
-copySign x y | makePos   = abs x
-             | otherwise = negate $ abs x
-  where
-    makePos | isNegativeZero y = False
-            | y < 0            = False
-            | otherwise        = True
+copySign x y | isNaN y    =  x
+             | isNeg y    =  negate $ abs x
+             | otherwise  =  abs x
+  where isNeg r  =  isNegativeZero r || r < 0
 
 magScale :: (RealFloat a) => Complex a -> (a, Int)  --magScale z = (magnitude (z/r^k), k). See note [magnitude implementation]
 magScale (x:+y) = (sqrt (sqr (scaleFloat mk x) + sqr (scaleFloat mk y)), k)

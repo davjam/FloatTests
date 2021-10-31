@@ -23,6 +23,14 @@ import GHC.Float
 
 main :: IO ()
 main = do
+  putFails "signum Double"   (signumTests @Double)
+  putFails "signum Float"    (signumTests @Float)
+  putFails "signum D0"       (signumTests @D0)
+  
+  putFails "signum mag Double"  (signumMagTests @Double)
+  putFails "signum mag Float"   (signumMagTests @Float)
+  putFails "signum mag D0"      (signumMagTests @D0)
+
   putFails "sqrt D0"         (sqrtTests @D0)
   putFails "sqrt Double"     (sqrtTests @Double)
   putFails "sqrt Float"      (sqrtTests @Float)
@@ -56,6 +64,35 @@ main = do
   putFails "Double vs Float"  doubleVsFloatTests
 
   putFails "Taylor Double" (taylorTests @Double)
+
+signumTests ::  forall a. (RealFloat a, Show a) => [Test a]
+signumTests = concat $ zipWith test [x:+y | y <- ys, x <- xs'] zs
+  where
+    test (x:+y) (u:+v) = concat
+      [ testC "signum" (show z) (signum z) (B $ u*xm, B $ v*ym) Nothing
+      | xm<-[1,-1], ym<-[1,-1]
+      , let z = (x*xm:+y*ym)
+      ]
+    ys  = [0, mn, 4, mx, 1/0, nan]
+    xs' = [0   ,   mn    , 3        , mx     , 1/0   , nan]
+    zs  = [0:+0,   1:+0  , 1:+0     , 1:+0   , 1:+0  , nan:+0  --y = 0
+          ,0:+1,   r2:+r2, 1:+0     , 1:+0   , 1:+0  , cNan    --y = mn
+          ,0:+1,   0:+1  , 0.6:+0.8 , 1:+4/mx, 1:+0  , cNan    --y = 4
+          ,0:+1,   0:+1  , 3/mx:+1  , r2:+r2 , 1:+0  , cNan    --y = mx
+          ,0:+1,   0:+1  , 0:+1     , 0:+1   , r2:+r2, cNan    --y = inf
+          ,0:+nan, cNan  , cNan     , cNan   , cNan  , cNan    --y = nan
+          ]
+    r2 = 1 / sqrt 2
+    cNan = nan:+nan
+
+signumMagTests :: forall a. (RealFloat a, Show a) => [Test a]
+signumMagTests = [Test "#1" (show z) (magnitude $ signum z) (expected z) | x<-nums, y<-nums, let z = x:+y]
+  where
+    nums = xs ++ bads
+    expected 0 = E 0
+    expected (x :+ y) | isNaN x = E nan
+                      | isNaN y = E nan
+                      | otherwise = A 1
 
 sqrtTests ::  forall a. (RealFloat a, Show a) => [Test a]
 sqrtTests = concat $  --all based on the expectations listed in Kahan's CSQRT function.
