@@ -26,14 +26,14 @@ bugFixTests = concat
   , testC' "#8532" Acosh  ((-1):+0   )  (E 0     , E   pi ) Nothing
   , testC' "#8532" Acosh  ((-1):+(-0))  (E 0     , E (-pi)) (Just (E 0, E pi))
   ,let z = 0:+0 in testC "#8539 #1 (**2)"  (show z) (z**2   ) (E 0, E 0) Nothing --MORE NEEDED FOR 8539? (Though I've not changed **)
-  
+
   --the following all fixed by #20425
 
   --Complex->Float fixes
   ,let z = mn:+0       in [Test "magnitude" (show z) (magnitude z)  (E mn)]
   ,let z = 0:+mn       in [Test "magnitude" (show z) (magnitude z)  (E mn)]
-  ,let z = (-0):+0     in [Test "phase"     (show z) (phase z)      (E $ if isIEEE (undefined :: a) then  pi else 0)] 
-  ,let z = (-0):+(-0)  in [Test "phase"     (show z) (phase z)      (E $ if isIEEE (undefined :: a) then -pi else 0)]
+  ,let z = (-0):+0     in [Test "phase"     (show z) (phase z)      (E $ if isieee then  pi else 0)]
+  ,let z = (-0):+(-0)  in [Test "phase"     (show z) (phase z)      (E $ if isieee then -pi else 0)]
                           
   --Complex->Complex fixes (in order listed in https://gitlab.haskell.org/ghc/ghc/-/issues/20425)
   --neg zero
@@ -70,8 +70,14 @@ bugFixTests = concat
 
   ,let z1 = (-1531.9375):+0 --For Float, original code gave significantly different results for z1 & z2.
        z2 = z1 - 0.0001
-                       in [Test       "31: asin" (show z1) (imagPart $ asin z1) (X 2 $ imagPart $ asin z2)]
+                       in [Test "31: asin"   (show z1) (imagPart $ asin z1) (X 2 $ imagPart $ asin z2)]
+  ,let z = 0:+(-0)     in testC "32: signum" (show z)  (signum z) (E 0, E $ -0) Nothing
+  ,let z = mx:+mx      in testC "33: signum" (show z)  (signum z) (A $ 1/sqrt 2, A $ 1 / sqrt 2) Nothing
+  ,let z = (-0):+0     in [Test "50: phase"  (show z)  (phase z)  (E $ if isieee then pi else 0)]
+  ,let z = (-0):+0     in testC "51: log"    (show z)  (log z)    (E $ -inf, E pi) (Just (E $ -inf, E 0))
+  ,let z = inf:+inf    in testC "52: signum" (show z)  (signum z) (A $ 1/sqrt 2, A $ 1 / sqrt 2) Nothing
   ]
+  where isieee = isIEEE (undefined :: a)
 
 inf, mn, mx :: forall a.RealFloat a => a
 inf = 1/0
@@ -104,14 +110,14 @@ fnF Sqrt  = sqrt
 fnF Exp   = exp
 fnF Log   = log
 fnF Sin   = sin
-fnF Cos   = cos  
-fnF Tan   = tan  
-fnF Asin  = asin 
-fnF Acos  = acos 
-fnF Atan  = atan 
-fnF Sinh  = sinh 
-fnF Cosh  = cosh 
-fnF Tanh  = tanh 
+fnF Cos   = cos
+fnF Tan   = tan
+fnF Asin  = asin
+fnF Acos  = acos
+fnF Atan  = atan
+fnF Sinh  = sinh
+fnF Cosh  = cosh
+fnF Tanh  = tanh
 fnF Asinh = asinh
 fnF Acosh = acosh
 fnF Atanh = atanh
@@ -120,7 +126,7 @@ type CExp a = (Expected a, Expected a)  --(expected real, expected imag)
 
 --a more compact version for many situations
 testC' :: (RealFloat a, Show a) => String -> Function -> Complex a -> CExp a -> Maybe (CExp a) -> [Test a]
-testC' label f z = testC (label ++ ": " ++ fnName f) (show z) (fnF f z) 
+testC' label f z = testC (label ++ ": " ++ fnName f) (show z) (fnF f z)
 
 --create a list of two tests, one for the realPart and one for the imagPart.
 testC :: RealFloat a => String -> String -> Complex a -> CExp a -> (Maybe (CExp a)) -> [Test a]
