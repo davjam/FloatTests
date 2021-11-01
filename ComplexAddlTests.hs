@@ -224,8 +224,8 @@ gnumericTests = concatMap testFn allFunctions where
   testFn fn = concat $ zipWith testVal zs (fnYs fn) where
     testVal z (C (u:+v)) | isIEEE u  = testC (fnName fn) (show z') (pushToPlusZero $ fnF fn z') (B u, B v) Nothing
                          | otherwise = testC (fnName fn) (show z ) (pushToPlusZero $ fnF fn z ) (B u, B v) Nothing
-      where z' | Just q <- branchCutPointQuadrant fn z = pushToQuadrant q z
-               | otherwise                             =                  z
+      where z' | Just (q,_,_) <- branchCutPointQuadrant fn z = pushToQuadrant q z
+               | otherwise                                   =                  z
     testVal _ Err        = []
     pushToPlusZero (x:+y) = ppz x :+ ppz y
       where
@@ -383,22 +383,32 @@ fnR Atanh = F.atanh
 
 data Quadrant = QI | QII | QIII | QIV
   deriving (Eq, Show)
+
+data Axis = Re | Im
+  deriving (Eq, Show)
   
-branchCutPointQuadrant :: RealFloat a => Function -> Complex a -> Maybe Quadrant
-branchCutPointQuadrant Sqrt  (x:+0) | x < 0    = Just QII
-branchCutPointQuadrant Log   (x:+0) | isNeg x  = Just QII
-branchCutPointQuadrant Asin  (x:+0) | x < (-1) = Just QII
-                                    | x > 1    = Just QIV
-branchCutPointQuadrant Acos  (x:+0) | x < (-1) = Just QII
-                                    | x > 1    = Just QIV
-branchCutPointQuadrant Atan  (0:+y) | y < (-1) = Just QIII
-                                    | y > 1    = Just QI
-branchCutPointQuadrant Asinh (0:+y) | y < (-1) = Just QIII
-                                    | y > 1    = Just QI
-branchCutPointQuadrant Acosh (x:+0) | x < 0    = Just QII
-                                    | x < 1    = Just QI
-branchCutPointQuadrant Atanh (x:+0) | x < (-1) = Just QII
-                                    | x > 1    = Just QIV
+data WhichZero = PZ | NZ
+  deriving (Eq, Show)
+  
+--if a point is on a branch cut:
+--  which quadrant should it be continuous with (if there are no negative zeros)
+--  which axis is it on
+--  which of the (signed) zeros currently map the wrong way
+branchCutPointQuadrant :: RealFloat a => Function -> Complex a -> Maybe (Quadrant, Axis, WhichZero)
+branchCutPointQuadrant Sqrt  (x:+0) | x < 0    = Just (QII , Re, NZ)
+branchCutPointQuadrant Log   (x:+0) | isNeg x  = Just (QII , Re, NZ)
+branchCutPointQuadrant Asin  (x:+0) | x < (-1) = Just (QII , Re, NZ)
+                                    | x > 1    = Just (QIV , Re, PZ)
+branchCutPointQuadrant Acos  (x:+0) | x < (-1) = Just (QII , Re, NZ)
+                                    | x > 1    = Just (QIV , Re, PZ)
+branchCutPointQuadrant Atan  (0:+y) | y < (-1) = Just (QIII, Im, PZ)
+                                    | y > 1    = Just (QI  , Im, NZ)
+branchCutPointQuadrant Asinh (0:+y) | y < (-1) = Just (QIII, Im, PZ)
+                                    | y > 1    = Just (QI  , Im, NZ)
+branchCutPointQuadrant Acosh (x:+0) | x < 0    = Just (QII , Re, NZ)
+                                    | x < 1    = Just (QI  , Re, NZ)
+branchCutPointQuadrant Atanh (x:+0) | x < (-1) = Just (QII , Re, NZ)
+                                    | x > 1    = Just (QIV , Re, PZ)
 branchCutPointQuadrant _     _                 = Nothing
 
 --Due to rounding, some D0 things close to the edge of the range map to the branch cut and don't inverse properly.
@@ -463,8 +473,6 @@ expectedRegression :: (HasVal a, RealFloat a) => Function -> Complex a -> Bool
 -- then subsequent logic (e.g. abs x > blah) isn't accidentally failing to check infinities
 expectedRegression _      (x:+y)  | isInfinite x                    = False
                                   | isInfinite y                    = False
-expectedRegression fn   z         | branchCutPointQuadrant fn z
-                                                /= Nothing          = True  --XXXX we should check - the originals might have gone the right way.
 expectedRegression Sqrt z@(x:+y)  | oldSqrtOverflow z = True
                                   | x == 0 && abs y < sqrt mn       = True  --underflow
                                   | y == 0 && abs x < sqrt mn       = True  --underflow
@@ -513,6 +521,7 @@ expectedRegression Atanh z@((-1):+0)                                = True
 expectedRegression Atanh z@(x:+y) | abs x >= sqrt mx                = True
                                   | abs y >= sqrt mx                = True  --UNCLEAR
                                   | w == 0                          = True  -- undeflow
+                                  | z+1 == z                        = True
                                   | isInfinite (realPart w)         = True
                                   | isInfinite (imagPart w)         = True
                                   | expectedRegression Log w        = True
@@ -534,6 +543,24 @@ isGood = not . isBad
 override :: RealFloat a => Function -> O.Complex a -> Maybe (O.Complex a)
 --Where the current functions don't fail with Infs/NaNs, but just return innacurate results.
 --All values from WA - except where noted.
+
+--This first case detects -0 on branch cuts for functions that sent them the wrong way (most of them, exept Log)
+override fn z@(x O.:+ y)
+  | isIEEE x
+  , Just (_, axis, whichZ) <- branchCutPointQuadrant fn (x:+y)
+  , not (goodBranchCut fn)
+  , isZeroOn axis whichZ                                = Just $ O.conjugate (fnC fn (O.conjugate z))
+  where
+  isZeroOn Re NZ | isNegativeZero y = True
+  isZeroOn Re PZ | isPositiveZero y = True
+  isZeroOn Im NZ | isNegativeZero x = True
+  isZeroOn Im PZ | isPositiveZero x = True
+  isZeroOn _  _                     = False
+  isPositiveZero r = r == 0 && not (isNegativeZero r)
+  goodBranchCut :: Function -> Bool
+  goodBranchCut Log   = True
+  goodBranchCut _     = False
+
 override Asin  ((-1.0) O.:+ (-6.2138610988780994e-21))  = Just $ (-1.57079632671606857156503670)     O.:+ (-7.88280476662849959740264749e-11)
 override Asin  ((-1.0) O.:+   6.2138610988780994e-21 )  = Just $ (-1.57079632671606857156503670)     O.:+ ( 7.88280476662849959740264749e-11)
 override Asin  (( 1.0) O.:+ (-6.2138610988780994e-21))  = Just $ ( 1.57079632671606857156503670)     O.:+ (-7.88280476662849959740264749e-11)
@@ -553,16 +580,23 @@ override Acosh (( 1.0) O.:+ ( 6.2138610988780994e-21))  = Just $   7.88280476662
 override Log   z@(x O.:+ y) | abs x == 5.0e-324 --WA not quite accurate here.
                            && abs y == 5.0e-324         = Just $ magEq x                             O.:+ O.phase z
 
+{-
 --For these, I think the old atanh was wrong.
---I also think WA IS WRONG! (WA seems to think these are on the branch cut and goes in wrong direction. It gets e.g. 5.0e-19 right).
-override Atanh z@(x O.:+ ( 5.0e-324))  | x > 2 && x < 4 = Just $   x' O.:+ ( 1.570796326794897)
+--I also think WA IS WRONG! (WA seems to think these are on the branch cut and goes in wrong direction:
+
+atanh (3 + i5e-10 ) = 0.346... + 1.570... i
+atanh (3 + i5e-20 ) = 0.346... + 1.570... i
+atanh (3 + i5e-81 ) = 0.346... + 1.570... i
+atanh (3 + i5e-82 ) = 0.346... - 1.570... i
+atanh (3 + i5e-324) = 0.346... - 1.570... i
+atanh (3          ) = 0.346... - 1.570... i
+atanh (3 - i5e-324) = 0.346... - 1.570... i
+-}
+override Atanh z@(x O.:+ y) | abs y == mn && abs x > 1 = Just $ x' O.:+ F.copySign 1.570796326794897 y
   where x' O.:+ _ = atanh z
-override Atanh z@(x O.:+ (-5.0e-324))  | x > 2 && x < 4 = Just $   x' O.:+ (-1.570796326794897)
-  where x' O.:+ _ = atanh z
---these match Float values:
-override Atanh z@(x O.:+ ( 1.0e-45))  | x > 2 && x < 4 = Just $   x' O.:+ ( 1.5707964)
-  where x' O.:+ _ = atanh z
-override Atanh z@(x O.:+ (-1.0e-45))  | x > 2 && x < 4 = Just $   x' O.:+ (-1.5707964)
+
+--The original code had correct branch cut behaviour for nonIEEE types for everything except Atanh, where it went the wrong way:
+override Atanh z@(x O.:+ 0) | not (isIEEE x) && abs x > 1 = Just $ x' O.:+ F.copySign 1.570796326794897 (-x)
   where x' O.:+ _ = atanh z
 
 override _ z = Nothing
