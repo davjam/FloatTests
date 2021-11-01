@@ -73,6 +73,7 @@ bugFixTests = concat
                        in [Test "31: asin"   (show z1) (imagPart $ asin z1) (X 2 $ imagPart $ asin z2)]
   ,let z = 0:+(-0)     in testC "32: signum" (show z)  (signum z) (E 0, E $ -0) Nothing
   ,let z = mx:+mx      in testC "33: signum" (show z)  (signum z) (A $ 1/sqrt 2, A $ 1 / sqrt 2) Nothing
+  ,let z = 2/mx:+0     in testC "34:(1:+0)/" (show z)  ((1:+0)/z) (A $ mx/2, E 0) Nothing 
   ,let z = (-0):+0     in [Test "50: phase"  (show z)  (phase z)  (E $ if isieee then pi else 0)]
   ,let z = (-0):+0     in testC "51: log"    (show z)  (log z)    (E $ -inf, E pi) (Just (E $ -inf, E 0))
   ,let z = inf:+inf    in testC "52: signum" (show z)  (signum z) (A $ 1/sqrt 2, A $ 1 / sqrt 2) Nothing

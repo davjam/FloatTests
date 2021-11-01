@@ -57,6 +57,10 @@ main = do
   putFails "gnumericTests Double" (gnumericTests @Double)
   putFails "gnumericTests Float"  (gnumericTests @Float)
 
+  putFails "divRegTests D0"     (divRegTests @D0)
+  putFails "divRegTests Double" (divRegTests @Double)
+  putFails "divRegTests Float"  (divRegTests @Float)
+
   putFails "regressionTests D0"     (regressionTests @D0      A)
   putFails "regressionTests Double" (regressionTests @Double  A)
   putFails "regressionTests Float"  (regressionTests @Float   $ X 3)
@@ -242,6 +246,18 @@ regressionTests match = concat $
   , let zC = x O.:+ y
         fnCz = fromMaybe (fnC fn zC) $ override fn zC
   ]
+
+divRegTests :: (RealFloat a, HasVal a, Show a) => [Test a]
+divRegTests = concat $
+  [ testC (show z ++ "/") (show w) (z/w) (A p, A q) Nothing
+  | x <- xs', y <- xs', let z = x:+y
+  , u <- xs', v <- xs', let w = u:+v
+  , let p O.:+q = (x O.:+ y) / (u O.:+ v)
+  , not $ isNaN p
+  , not $ isNaN q
+  ]
+  --with full xs, we'd do half a billion tests, so keep it a bit smaller:
+  where xs' = [-mx, -sqrt mx, -10, -1, -sqrt mn, -mn, -0, 0, mn, sqrt mn, 1, 10, sqrt mx, mx]
 
 doubleVsFloatTests :: [Test Float]
 doubleVsFloatTests = concat $ 
