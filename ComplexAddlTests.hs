@@ -499,9 +499,11 @@ expectedRegression Tan z@(x:+y)   | abs y >= log mx                 = True  --si
                                             (A $ sin x / cos x))    = True  --starts to fail after abs x > 1e10
 expectedRegression Atan z@(0:+1)                                    = True  --mismatches Kahan's principle expressions
 expectedRegression Atan z@(0:+(-1))                                 = True
-expectedRegression Atan z@(x:+y)  | abs x >= sqrt mx                = True  --UNCLEAR
+expectedRegression Atan z@(x:+y)  | isInfinite (realPart w)         = True
+                                  | isInfinite (imagPart w)         = True
                                   | abs y >= sqrt mx                = True                       
                                   | expectedRegression Sqrt (1+z*z) = True
+  where w = z*z
 expectedRegression Asinh z@(x:+y) | oldSqrtOverflow z               = True
                                   | z*z+1 == z*z                    = True
                                   | z*z+(0:+1) == z*z               = True
@@ -519,9 +521,8 @@ expectedRegression Atanh z@(1:+0)                                   = True  --mi
 expectedRegression Atanh z@((-1):+0)                                = True
 
 expectedRegression Atanh z@(x:+y) | abs x >= sqrt mx                = True
-                                  | abs y >= sqrt mx                = True  --UNCLEAR
                                   | w == 0                          = True  -- undeflow
-                                  | z+1 == z                        = True
+                                  | z+1 == z                        = True  -- (1+z)/(1-z) becomes -1:+0, losing sign on imag part
                                   | isInfinite (realPart w)         = True
                                   | isInfinite (imagPart w)         = True
                                   | expectedRegression Log w        = True
