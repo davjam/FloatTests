@@ -274,15 +274,19 @@ instance  (RealFloat a) => Floating (Complex a) where
                             p = sqrt(1+s*s)
                             cutover = F.asinh maxNonInfiniteFloat / 4 --NB fails in Windows, at time of writing
 
-    -- See Note [asin, acos, acosh implementation]
+    -- See Note [asin, acos implementation]
     asin z@(x:+_)  =  atan(x/realPart (sqrt(-z+:1)*sqrt(z+:1)))
                    :+ asinImag z
 
     acos z         =  2 * atan(realPart(sqrt(-z+:1))/realPart(sqrt(z+:1)))
                    :+ asinImag (-z)
 
-    acosh z        =  acoshReal z
-                   :+ 2 * atan (imagPart(sqrt(z-:1)) / realPart(sqrt(z+:1)))
+    -- acosh z = +/- iTimes(acos z). See http://scipp.ucsc.edu/~haber/archives/physics116A10/arc_10.pdf
+    acosh z@(x:+y) | not (isIEEE x)
+                      && y == 0 && x > 1  =  -w
+                   | isNeg y              =  -w
+                   | otherwise            =   w
+      where w = iTimes(acos z)
 
     atan z         =  -iTimes(atanh(iTimes z))
 
@@ -314,28 +318,18 @@ instance  (RealFloat a) => Floating (Complex a) where
       | otherwise = exp x - 1
     {-# INLINE expm1 #-}
 
-asinImag, acoshReal :: RealFloat a => Complex a -> a
-
 --NB, conjugate(sqrt w)) /= sqrt(conjugate w) when w doesn't support -0.0: (e.g. (-1):+0).
---(Kahan's formula sqrt(z-1)* is ambiguous, but like this works correctly whether IEEE754 or not).
-asinImag z@(x:+y) = maybe (F.asinh $ imagPart $ conjugate (sqrt(-z+:1)) * sqrt (z+:1))
-                          fixSign
-                          (asinhQ z)
+--(Kahan's formula sqrt(z-1)* is ambiguous, but conjugate(sqrt(z-1)) works correctly whether IEEE754 or not).
+asinImag :: RealFloat a => Complex a -> a
+asinImag z@(x:+y) | abs x > 1 && x+1 == x  =  fixSign $ log 2 + log m + k*log b
+                  | otherwise              =  F.asinh $ imagPart $ conjugate (sqrt(-z+:1)) * sqrt (z+:1)
   where
     fixSign w | isIEEE w  =  copySign w y
               | y == 0    = -copySign w x
               | otherwise =  copySign w y
-
-acoshReal z       = maybe (F.asinh $ realPart $ conjugate (sqrt(z-:1)) * sqrt (z+:1))
-                          id
-                          (asinhQ z)
-
-asinhQ :: RealFloat a => Complex a -> Maybe a
-asinhQ z@(x:+_) | abs x > 1 && x+1 == x  =  Just (log 2 + log m + k*log b)
-                | otherwise              =  Nothing
-  where (m,k')  =  magScale z
-        k       =  fromIntegral k'
-        b       =  fromIntegral $ floatRadix x
+    (m,k')  =  magScale z
+    k       =  fromIntegral k'
+    b       =  fromIntegral $ floatRadix x
 
 {-
 Note [Kahan implementations]
@@ -447,25 +441,22 @@ Note [sqrt implementation]
               = sqrt q * 2^j
               = sqrt q * 2^((k-1) `div` 2)
 
-Note [asin, acos, acosh implementation]
+Note [asin, acos implementation]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   I can't (yet) derive Kahan's formulae (strangely given as comments)
   from the logrithmic definitions.
   But they seem to me to be correct, but are vulnerable to intermediate overflow.
+
+  Note: Im(sqrt(-z*conjugate z)) = Im(sqrt(-(x+iy)*(x-iy)))
+                                 = Im(sqrt(-(x^2+y^2 :+0)))
+                                 = -magnitude z (IEEE types)
+                                 =  magnitude z (non IEEE)
+
   To solve the overflow:
 
   For large enough x (i.e. abs x > lim):
     x+1 == x
     sqrt(x^2+y^2) > abs x > lim
-
-  Note: Re(sqrt(z*conjugate z))  = Re(sqrt((x+iy)(x-iy)))
-                                 = Re(sqrt(x^2+y^2) :+ 0)
-                                 = sqrt(x^2+y^2)
-                                 = magnitude z
-        Im(sqrt(-z*conjugate z)) = Im(sqrt(-x^2+y^2) :+ 0)
-                                 = Im(-i * sqrt(x&2+y^2) :+ 0)
-                                 = -magnitude z (IEEE types)
-                                 =  magnitude z (non IEEE)
 
   let q = imagPart(conjugate(sqrt(z+:1))*sqrt(-z+:1))
         = imagPart(conjugate(sqrt z)*sqrt(-z))
@@ -474,6 +465,7 @@ Note [asin, acos, acosh implementation]
         = +/- magnitude z
         = +/- m*b^k  where (m,k) = magScale z
 
+
   Then
   asinh q = log(q + sqrt (q^2+1))
           = log(q + sqrt (q^2))
@@ -481,7 +473,7 @@ Note [asin, acos, acosh implementation]
           = log 2 + log q
           = log 2 + log m + k*log b
 
-  Similar for acos, acosh.
+  Similar for acos.
 -}
 
 -- | @since 4.8.0.0
@@ -542,7 +534,9 @@ copySign :: RealFloat a => a -> a -> a
 copySign x y | isNaN y    =  x
              | isNeg y    =  negate $ abs x
              | otherwise  =  abs x
-  where isNeg r  =  isNegativeZero r || r < 0
+
+isNeg :: RealFloat a => a -> Bool
+isNeg r  =  isNegativeZero r || r < 0
 
 magScale :: (RealFloat a) => Complex a -> (a, Int)  --magScale z = (magnitude (z/r^k), k). See note [magnitude implementation]
 magScale (x:+y) = (sqrt (sqr (scaleFloat mk x) + sqr (scaleFloat mk y)), k)
