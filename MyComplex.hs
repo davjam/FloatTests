@@ -317,10 +317,14 @@ instance  (RealFloat a) => Floating (Complex a) where
 asinImag, acoshReal :: RealFloat a => Complex a -> a
 
 --NB, conjugate(sqrt w)) /= sqrt(conjugate w) when w doesn't support -0.0: (e.g. (-1):+0).
---(Kahan's formula sqrt(z-1)* is ambiguous, but like this works correctly for IEEE754 and not floats).
-asinImag z@(_:+y) = maybe (F.asinh $ imagPart $ conjugate (sqrt(-z+:1)) * sqrt (z+:1))
-                          (`copySign` y)
+--(Kahan's formula sqrt(z-1)* is ambiguous, but like this works correctly whether IEEE754 or not).
+asinImag z@(x:+y) = maybe (F.asinh $ imagPart $ conjugate (sqrt(-z+:1)) * sqrt (z+:1))
+                          fixSign
                           (asinhQ z)
+  where
+    fixSign w | isIEEE w  =  copySign w y
+              | y == 0    = -copySign w x
+              | otherwise =  copySign w y
 
 acoshReal z       = maybe (F.asinh $ realPart $ conjugate (sqrt(z-:1)) * sqrt (z+:1))
                           id

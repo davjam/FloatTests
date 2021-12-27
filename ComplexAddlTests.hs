@@ -14,7 +14,6 @@ import Double0
 import TestValue
 
 import Data.Char
-import Data.Maybe
 import GHC.Float
 
 ------------------------------------
@@ -233,18 +232,21 @@ gnumericTests = concatMap testFn allFunctions where
               | otherwise        = r
   zs = [x:+y|y<-gnumericXs,x<-gnumericXs]
 
-
 regressionTests :: (RealFloat a, HasVal a, Show a) => (a -> Expected a) -> [Test a]
 regressionTests match = concat $
-  [ testC' "" fn z (match $ O.realPart fnCz, match $ O.imagPart fnCz) Nothing
+  [ testC' "" fn (x:+y) (match u, match v) Nothing
   | fn <- allFunctions
   , fn /= Sq
   , x <- xs
   , y <- xs
-  , let z = x :+ y
-  , not (expectedRegression fn z)
-  , let zC = x O.:+ y
-        fnCz = fromMaybe (fnC fn zC) $ override fn zC
+  , let z = x O.:+ y
+        w = fnC fn z
+  , let regVal = regressionValue fn z
+  , regVal /= DontTest
+  , let u O.:+ v | UseInstead r <- regVal = r
+                 | otherwise              = w
+  , isGood u
+  , isGood v
   ]
 
 divRegTests :: (RealFloat a, HasVal a, Show a) => [Test a]
@@ -466,91 +468,25 @@ outOfBounds Sinh (x:+0) | abs x > logmx = Just Imag
 outOfBounds Cosh (x:+0) | abs x > logmx = Just Imag
 outOfBounds _    _                      = Nothing
 
---This is where overflow Infinity/NaN incorrectly happens in existing functions.
---(Hence I can't regression test against them).
-expectedRegression :: (HasVal a, RealFloat a) => Function -> Complex a -> Bool
--- deal with any infinities first.
--- then subsequent logic (e.g. abs x > blah) isn't accidentally failing to check infinities
-expectedRegression _      (x:+y)  | isInfinite x                    = False
-                                  | isInfinite y                    = False
-expectedRegression Sqrt z@(x:+y)  | oldSqrtOverflow z = True
-                                  | x == 0 && abs y < sqrt mn       = True  --underflow
-                                  | y == 0 && abs x < sqrt mn       = True  --underflow
-expectedRegression Log  z@(x:+y)  | isNegativeZero x && y == 0      = True  --branch cut at -0
-                                  | x == 0 && abs y < sqrt mn       = True  --underflow in magnitude
-                                  | y == 0 && abs x < sqrt mn       = True  --underflow in magnitude
-                                  | isGood x && isGood y
-                                      && isInfinite (magnitude z)   = True  --e.g. mx :+ mx
-expectedRegression Asin z@(x:+y)  | z*z+1 == z*z                    = True  --loss of precision -> NaN
-                                  | z*z+(0:+1) == z*z               = True
-                                  | isGood x && isGood y &&
-                                    (isBad (realPart $ z*z)
-                                     || isBad (imagPart $ z*z))     = True
-                                  | y /= 0 && abs y <= sqrt mn      = True  --underflow in sqrt
-expectedRegression Acos z@(x:+y)  | oldSqrtOverflow z               = True
-                                  | z*z+1 == z*z                    = True  --loss of precision -> NaN
-                                  | z*z+(0:+1) == z*z               = True
-                                  | expectedRegression Sqrt (1-z*z) = True
-expectedRegression Tan z@(x:+y)   | abs y >= log mx                 = True  --sinh y, cosh y overflow
-                                  | isNegativeZero y                = True  --loss of -0
-                                  | x ==  pi / 2                    = True  --inaccuracy
-                                  | x == -pi / 2                    = True
-                                  | not (tan x `hasVal` 
-                                            (A $ sin x / cos x))    = True  --starts to fail after abs x > 1e10
-expectedRegression Atan z@(0:+1)                                    = True  --mismatches Kahan's principle expressions
-expectedRegression Atan z@(0:+(-1))                                 = True
-expectedRegression Atan z@(x:+y)  | isInfinite (realPart w)         = True
-                                  | isInfinite (imagPart w)         = True
-                                  | abs y >= sqrt mx                = True                       
-                                  | expectedRegression Sqrt (1+z*z) = True
-  where w = z*z
-expectedRegression Asinh z@(x:+y) | oldSqrtOverflow z               = True
-                                  | z*z+1 == z*z                    = True
-                                  | z*z+(0:+1) == z*z               = True
-                                  | expectedRegression Sqrt (1+z*z) = True
-expectedRegression Acosh z@(x:+y) | isInfinite (realPart $ 2*z)     = True  --overflow
-                                  | isInfinite (imagPart $ 2*z)     = True
-                                  | expectedRegression Sqrt (z+1)   = True
-                                  | expectedRegression Sqrt (z-1)   = True
-expectedRegression Tanh z@(x:+y)   | abs x >= log mx                = True  --sinh x, cosh x overflow
-                                   | y ==  pi / 2                   = True  --inaccuracy
-                                   | y == -pi / 2                   = True
-                                   | not (tan y `hasVal`
-                                              (A $ sin y / cos y))  = True
-expectedRegression Atanh z@(1:+0)                                   = True  --mismatches Kahan's principle expressions
-expectedRegression Atanh z@((-1):+0)                                = True
-
-expectedRegression Atanh z@(x:+y) | abs x >= sqrt mx                = True
-                                  | w == 0                          = True  -- undeflow
-                                  | z+1 == z                        = True  -- (1+z)/(1-z) becomes -1:+0, losing sign on imag part
-                                  | isInfinite (realPart w)         = True
-                                  | isInfinite (imagPart w)         = True
-                                  | expectedRegression Log w        = True
-  where w = (1.0+z) / (1.0-z)
-expectedRegression _ _                                              = False
-
-oldSqrtOverflow :: RealFloat a => Complex a -> Bool
-oldSqrtOverflow z | isInfinite(realPart zz) = True
-                  | isInfinite(imagPart zz) = True
-                  | otherwise               = False
-  where zz = z * z
-
 isGood, isBad :: RealFloat a => a -> Bool
 isBad x | isInfinite x = True
         | isNaN      x = True
         | otherwise    = False
 isGood = not . isBad
 
-override :: RealFloat a => Function -> O.Complex a -> Maybe (O.Complex a)
+data RegressionType a = UseExisting | UseInstead a | DontTest
+  deriving (Eq, Show)
+
 --Where the current functions don't fail with Infs/NaNs, but just return innacurate results.
 --All values from WA - except where noted.
+regressionValue :: RealFloat a => Function -> O.Complex a -> RegressionType (O.Complex a)
 
 --This first case detects -0 on branch cuts for functions that sent them the wrong way (most of them, exept Log)
-override fn z@(x O.:+ y)
+regressionValue fn z@(x O.:+ y)
   | isIEEE x
   , Just (_, axis, whichZ) <- branchCutPointQuadrant fn (x:+y)
   , not (goodBranchCut fn)
-  , isZeroOn axis whichZ                                = Just $ O.conjugate (fnC fn (O.conjugate z))
+  , isZeroOn axis whichZ                                = UseInstead $ O.conjugate (fnC fn (O.conjugate z))
   where
   isZeroOn Re NZ | isNegativeZero y = True
   isZeroOn Re PZ | isPositiveZero y = True
@@ -562,24 +498,29 @@ override fn z@(x O.:+ y)
   goodBranchCut Log   = True
   goodBranchCut _     = False
 
-override Asin  ((-1.0) O.:+ (-6.2138610988780994e-21))  = Just $ (-1.57079632671606857156503670)     O.:+ (-7.88280476662849959740264749e-11)
-override Asin  ((-1.0) O.:+   6.2138610988780994e-21 )  = Just $ (-1.57079632671606857156503670)     O.:+ ( 7.88280476662849959740264749e-11)
-override Asin  (( 1.0) O.:+ (-6.2138610988780994e-21))  = Just $ ( 1.57079632671606857156503670)     O.:+ (-7.88280476662849959740264749e-11)
-override Asin  (( 1.0) O.:+   6.2138610988780994e-21 )  = Just $ ( 1.57079632671606857156503670)     O.:+ ( 7.88280476662849959740264749e-11)
-override Acos  ((-1.0) O.:+ (-6.2138610988780994e-21))  = Just $   3.14159265351096519079635839      O.:+   7.88280476662849959740264749e-11
-override Acos  ((-1.0) O.:+ ( 6.2138610988780994e-21))  = Just $   3.14159265351096519079635839      O.:+ (-7.88280476662849959740264749e-11)
-override Acos  (( 1.0) O.:+ ( 6.2138610988780994e-21))  = Just $   7.8828047666284996e-11            O.:+ (-7.8828047666284996e-11)
-override Acos  (( 1.0) O.:+ (-6.2138610988780994e-21))  = Just $   7.8828047666284996e-11            O.:+ ( 7.8828047666284996e-11)
-override Asinh ((-6.2138610988780994e-21) O.:+ (-1.0))  = Just $ (-7.88280476662849959740264749e-11) O.:+ (-1.57079632671606857156503670)
-override Asinh ((-6.2138610988780994e-21) O.:+ ( 1.0))  = Just $ (-7.88280476662849959740264749e-11) O.:+ ( 1.57079632671606857156503670)
-override Asinh (( 6.2138610988780994e-21) O.:+ ( 1.0))  = Just $ ( 7.88280476662849959740264749e-11) O.:+ ( 1.57079632671606857156503670)
-override Asinh (( 6.2138610988780994e-21) O.:+ (-1.0))  = Just $ ( 7.88280476662849959740264749e-11) O.:+ (-1.57079632671606857156503670)
-override Acosh ((-1.0) O.:+ (-6.2138610988780994e-21))  = Just $   7.88280476662849959740264749e-11  O.:+ (-3.14159265351096519079635839)
-override Acosh ((-1.0) O.:+ ( 6.2138610988780994e-21))  = Just $   7.88280476662849959740264749e-11  O.:+ ( 3.14159265351096519079635839)
-override Acosh (( 1.0) O.:+ (-6.2138610988780994e-21))  = Just $   7.8828047666284996e-11            O.:+ (-7.8828047666284996e-11)
-override Acosh (( 1.0) O.:+ ( 6.2138610988780994e-21))  = Just $   7.8828047666284996e-11            O.:+   7.8828047666284996e-11
-override Log   z@(x O.:+ y) | abs x == 5.0e-324 --WA not quite accurate here.
-                           && abs y == 5.0e-324         = Just $ magEq x                             O.:+ O.phase z
+regressionValue Tan  (x O.:+ y) | abs x == pi/2 = DontTest
+                                | abs x > 1e19  = DontTest  --results just innacurate for huge vals. (Same true for sin, cos. But we've not changed the defn).
+regressionValue Tanh (x O.:+ y) | abs y == pi/2 = DontTest
+                                | abs y > 1e19  = DontTest
+
+regressionValue Asin  ((-1.0) O.:+ (-6.2138610988780994e-21))  = UseInstead $ (-1.57079632671606857156503670)     O.:+ (-7.88280476662849959740264749e-11)
+regressionValue Asin  ((-1.0) O.:+   6.2138610988780994e-21 )  = UseInstead $ (-1.57079632671606857156503670)     O.:+ ( 7.88280476662849959740264749e-11)
+regressionValue Asin  (( 1.0) O.:+ (-6.2138610988780994e-21))  = UseInstead $ ( 1.57079632671606857156503670)     O.:+ (-7.88280476662849959740264749e-11)
+regressionValue Asin  (( 1.0) O.:+   6.2138610988780994e-21 )  = UseInstead $ ( 1.57079632671606857156503670)     O.:+ ( 7.88280476662849959740264749e-11)
+regressionValue Acos  ((-1.0) O.:+ (-6.2138610988780994e-21))  = UseInstead $   3.14159265351096519079635839      O.:+   7.88280476662849959740264749e-11
+regressionValue Acos  ((-1.0) O.:+ ( 6.2138610988780994e-21))  = UseInstead $   3.14159265351096519079635839      O.:+ (-7.88280476662849959740264749e-11)
+regressionValue Acos  (( 1.0) O.:+ ( 6.2138610988780994e-21))  = UseInstead $   7.8828047666284996e-11            O.:+ (-7.8828047666284996e-11)
+regressionValue Acos  (( 1.0) O.:+ (-6.2138610988780994e-21))  = UseInstead $   7.8828047666284996e-11            O.:+ ( 7.8828047666284996e-11)
+regressionValue Asinh ((-6.2138610988780994e-21) O.:+ (-1.0))  = UseInstead $ (-7.88280476662849959740264749e-11) O.:+ (-1.57079632671606857156503670)
+regressionValue Asinh ((-6.2138610988780994e-21) O.:+ ( 1.0))  = UseInstead $ (-7.88280476662849959740264749e-11) O.:+ ( 1.57079632671606857156503670)
+regressionValue Asinh (( 6.2138610988780994e-21) O.:+ ( 1.0))  = UseInstead $ ( 7.88280476662849959740264749e-11) O.:+ ( 1.57079632671606857156503670)
+regressionValue Asinh (( 6.2138610988780994e-21) O.:+ (-1.0))  = UseInstead $ ( 7.88280476662849959740264749e-11) O.:+ (-1.57079632671606857156503670)
+regressionValue Acosh ((-1.0) O.:+ (-6.2138610988780994e-21))  = UseInstead $   7.88280476662849959740264749e-11  O.:+ (-3.14159265351096519079635839)
+regressionValue Acosh ((-1.0) O.:+ ( 6.2138610988780994e-21))  = UseInstead $   7.88280476662849959740264749e-11  O.:+ ( 3.14159265351096519079635839)
+regressionValue Acosh (( 1.0) O.:+ (-6.2138610988780994e-21))  = UseInstead $   7.8828047666284996e-11            O.:+ (-7.8828047666284996e-11)
+regressionValue Acosh (( 1.0) O.:+ ( 6.2138610988780994e-21))  = UseInstead $   7.8828047666284996e-11            O.:+   7.8828047666284996e-11
+regressionValue Log   z@(x O.:+ y) | abs x == 5.0e-324 --WA not quite accurate here.
+                                  && abs y == 5.0e-324         = UseInstead $ magEq x                             O.:+ O.phase z
 
 {-
 --For these, I think the old atanh was wrong.
@@ -593,14 +534,13 @@ atanh (3 + i5e-324) = 0.346... - 1.570... i
 atanh (3          ) = 0.346... - 1.570... i
 atanh (3 - i5e-324) = 0.346... - 1.570... i
 -}
-override Atanh z@(x O.:+ y) | abs y == mn && abs x > 1 = Just $ x' O.:+ F.copySign 1.570796326794897 y
-  where x' O.:+ _ = atanh z
+regressionValue Atanh z@(x O.:+ y) | abs y' == pi/2 = UseInstead $ x' O.:+ F.copySign y' goodSign where
+  x' O.:+ y' = atanh z
+  goodSign | isIEEE x = y
+           | y == 0 && x > 0 = -1
+           | otherwise = y
 
---The original code had correct branch cut behaviour for nonIEEE types for everything except Atanh, where it went the wrong way:
-override Atanh z@(x O.:+ 0) | not (isIEEE x) && abs x > 1 = Just $ x' O.:+ F.copySign 1.570796326794897 (-x)
-  where x' O.:+ _ = atanh z
-
-override _ z = Nothing
+regressionValue _ z = UseExisting
 
 {-
 magnitude (x:+x) = sqrt(x*x + x*x) = sqrt(2*x*x) = sqrt 2 * x
